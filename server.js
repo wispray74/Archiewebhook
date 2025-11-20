@@ -15,7 +15,7 @@ app.use(express.json({ verify: (req, res, buf, encoding) => {
 app.use(express.urlencoded({ extended: true }));
 
 // 🔐 ADMIN PASSWORD untuk akses dashboard
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'ArchieInHere';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'changeme123';
 
 // 🎮 KONFIGURASI MULTIPLE GAMES dengan SECRET WEBHOOK PATH
 const GAMES = [
@@ -563,7 +563,8 @@ app.get('/', (req, res) => {
 
 // 📊 Protected Dashboard
 app.get('/dashboard', requireAuth, (req, res) => {
-    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    // Force HTTPS in dashboard URLs
+    const baseUrl = `https://${req.get('host')}`;
     
     const gamesHTML = GAMES.map(game => `
         <div class="game-card">
