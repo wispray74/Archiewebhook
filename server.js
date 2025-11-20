@@ -10,50 +10,53 @@ app.use(express.json({ verify: (req, res, buf, encoding) => {
     }
 }}));
 
-// 🎮 KONFIGURASI MULTIPLE GAMES
-const ROBLOX_API_KEY = process.env.ROBLOX_API_KEY;
-
+// 🎮 KONFIGURASI MULTIPLE GAMES - SETIAP GAME PUNYA API KEY SENDIRI
 const GAMES = [
     {
         id: 'game1',
         name: process.env.GAME_1_NAME || 'Game 1',
         universeId: process.env.GAME_1_UNIVERSE_ID,
+        apiKey: process.env.GAME_1_API_KEY,
         topic: process.env.GAME_1_TOPIC || 'ArchieDonationIDR'
     },
     {
         id: 'game2',
         name: process.env.GAME_2_NAME || 'Game 2',
         universeId: process.env.GAME_2_UNIVERSE_ID,
+        apiKey: process.env.GAME_2_API_KEY,
         topic: process.env.GAME_2_TOPIC || 'ArchieDonationIDR'
     },
     {
         id: 'game3',
         name: process.env.GAME_3_NAME || 'Game 3',
         universeId: process.env.GAME_3_UNIVERSE_ID,
+        apiKey: process.env.GAME_3_API_KEY,
         topic: process.env.GAME_3_TOPIC || 'ArchieDonationIDR'
     },
     {
         id: 'game4',
         name: process.env.GAME_4_NAME || 'Game 4',
         universeId: process.env.GAME_4_UNIVERSE_ID,
+        apiKey: process.env.GAME_4_API_KEY,
         topic: process.env.GAME_4_TOPIC || 'ArchieDonationIDR'
     },
     {
         id: 'game5',
         name: process.env.GAME_5_NAME || 'Game 5',
         universeId: process.env.GAME_5_UNIVERSE_ID,
+        apiKey: process.env.GAME_5_API_KEY,
         topic: process.env.GAME_5_TOPIC || 'ArchieDonationIDR'
     }
-].filter(game => game.universeId);
+].filter(game => game.universeId && game.apiKey);
 
-if (!ROBLOX_API_KEY) {
-    console.error('❌ ROBLOX_API_KEY wajib diatur!');
-    process.exit(1);
-}
-
+// Validasi minimal 1 game terkonfigurasi
 if (GAMES.length === 0) {
-    console.error('❌ Minimal 1 game harus dikonfigurasi!');
-    console.error('   Set environment: GAME_1_UNIVERSE_ID=your_universe_id');
+    console.error('❌ Minimal 1 game harus dikonfigurasi dengan lengkap!');
+    console.error('   Set environment variables:');
+    console.error('   GAME_1_NAME=My Game Name');
+    console.error('   GAME_1_UNIVERSE_ID=1234567890');
+    console.error('   GAME_1_API_KEY=your_api_key_here');
+    console.error('   GAME_1_TOPIC=ArchieDonationIDR (optional)');
     process.exit(1);
 }
 
@@ -64,6 +67,7 @@ console.log('📋 Configured Games:', GAMES.length);
 GAMES.forEach((game, index) => {
     console.log(`\n  🎮 ${game.name} (${game.id}):`);
     console.log(`     Universe ID: ${game.universeId}`);
+    console.log(`     API Key: ${game.apiKey.substring(0, 8)}...****`);
     console.log(`     Topic: ${game.topic}`);
 });
 console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
@@ -93,7 +97,7 @@ function formatRupiah(amount) {
     }).format(amount);
 }
 
-// ✅ Helper: Send ke Roblox
+// ✅ Helper: Send ke Roblox (menggunakan API key per game)
 async function sendToRoblox(game, donationData) {
     const apiUrl = `https://apis.roblox.com/messaging-service/v1/universes/${game.universeId}/topics/${encodeURIComponent(game.topic)}`;
     
@@ -112,7 +116,7 @@ async function sendToRoblox(game, donationData) {
             {
                 headers: {
                     'Content-Type': 'application/json',
-                    'x-api-key': ROBLOX_API_KEY
+                    'x-api-key': game.apiKey // ⭐ Menggunakan API key per game
                 },
                 timeout: 10000
             }
@@ -275,7 +279,7 @@ app.get('/', (req, res) => {
             id: g.id,
             name: g.name,
             universeId: g.universeId,
-            hasConfig: !!g.universeId
+            hasConfig: !!(g.universeId && g.apiKey)
         })),
         endpoints: endpoints,
         usage: {
@@ -337,14 +341,14 @@ app.get('/debug', (req, res) => {
         server: 'Archie Donation IDR Webhook - Multi Game',
         version: '1.0.0',
         configuration: {
-            hasApiKey: !!ROBLOX_API_KEY,
-            apiKeyPrefix: ROBLOX_API_KEY ? ROBLOX_API_KEY.substring(0, 8) + '...' : '❌ NOT SET',
             gamesConfigured: GAMES.length
         },
         games: GAMES.map(g => ({
             id: g.id,
             name: g.name,
             universeId: g.universeId,
+            hasApiKey: !!g.apiKey,
+            apiKeyPrefix: g.apiKey ? g.apiKey.substring(0, 8) + '...' : '❌ NOT SET',
             topic: g.topic
         })),
         environment: {
