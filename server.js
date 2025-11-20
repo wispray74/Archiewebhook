@@ -46,10 +46,15 @@ const GAMES = [
         saweriaToken: process.env.GAME_3_SAWERIA_TOKEN,
         socialbuzzToken: process.env.GAME_3_SOCIALBUZZ_TOKEN
     }
-].filter(game => game.universeId && game.apiKey);
+].filter(game => game.universeId && game.apiKey && game.webhookSecret && game.password);
 
 if (GAMES.length === 0) {
     console.error('❌ No games configured!');
+    console.error('   Required variables per game:');
+    console.error('   - GAME_X_UNIVERSE_ID');
+    console.error('   - GAME_X_API_KEY');
+    console.error('   - GAME_X_WEBHOOK_SECRET');
+    console.error('   - GAME_X_PASSWORD');
     process.exit(1);
 }
 
@@ -633,6 +638,7 @@ app.get('/dashboard', (req, res) => {
             justify-content: space-between;
             padding: 12px 0;
             border-bottom: 1px solid rgba(139, 92, 246, 0.1);
+            align-items: center;
         }
         .info-row:last-child { border-bottom: none; }
         .info-label { color: #94a3b8; font-size: 14px; }
@@ -675,6 +681,90 @@ app.get('/dashboard', (req, res) => {
             color: #f59e0b;
             border: 1px solid rgba(245, 158, 11, 0.3);
         }
+        
+        /* Secret Generator */
+        .secret-generator {
+            background: rgba(139, 92, 246, 0.1);
+            border: 2px dashed rgba(139, 92, 246, 0.3);
+            border-radius: 12px;
+            padding: 20px;
+            margin-top: 16px;
+        }
+        .secret-title {
+            color: #8b5cf6;
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 12px;
+        }
+        .secret-display {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+        .secret-input {
+            flex: 1;
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid rgba(139, 92, 246, 0.3);
+            border-radius: 8px;
+            padding: 12px;
+            color: #10b981;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            outline: none;
+        }
+        .btn {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #8b5cf6, #3b82f6);
+            color: white;
+        }
+        .btn-secondary {
+            background: rgba(139, 92, 246, 0.2);
+            color: #8b5cf6;
+            border: 1px solid rgba(139, 92, 246, 0.3);
+        }
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(139, 92, 246, 0.4);
+        }
+        .btn:active {
+            transform: translateY(0);
+        }
+        .help-text {
+            color: #64748b;
+            font-size: 12px;
+            margin-top: 8px;
+            line-height: 1.6;
+        }
+        .success-toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(16, 185, 129, 0.9);
+            color: white;
+            padding: 16px 24px;
+            border-radius: 12px;
+            font-weight: 600;
+            display: none;
+            animation: slideIn 0.3s ease-out;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            z-index: 1000;
+        }
+        @keyframes slideIn {
+            from { transform: translateX(400px); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        
         .footer {
             text-align: center;
             padding: 32px 0;
@@ -692,10 +782,13 @@ app.get('/dashboard', (req, res) => {
             .header h1 { font-size: 24px; }
             .card { padding: 20px; }
             .url-text { font-size: 11px; }
+            .secret-display { flex-direction: column; }
         }
     </style>
 </head>
 <body>
+    <div class="success-toast" id="toast">✓ Copied to clipboard!</div>
+    
     <div class="container">
         <div class="header">
             <h1>🎮 ${game.name}</h1>
@@ -719,12 +812,63 @@ app.get('/dashboard', (req, res) => {
         </div>
         
         <div class="card">
+            <h3>🔑 Secret Generator</h3>
+            <p style="color: #94a3b8; font-size: 13px; margin-bottom: 16px;">
+                Generate random secrets untuk webhook path dan tokens. Copy lalu paste ke Railway Variables.
+            </p>
+            
+            <div class="secret-generator">
+                <div class="secret-title">🔐 Webhook Secret (GAME_${game.id.slice(-1)}_WEBHOOK_SECRET)</div>
+                <div class="secret-display">
+                    <input type="text" class="secret-input" id="webhookSecret" value="${game.webhookSecret || ''}" readonly>
+                    <button class="btn btn-primary" onclick="copySecret('webhookSecret')">📋 Copy</button>
+                    <button class="btn btn-secondary" onclick="regenerateSecret('webhookSecret')">🔄 Generate</button>
+                </div>
+                <div class="help-text">
+                    ℹ️ Setelah generate, copy value ini ke Railway Variables dengan nama <strong>GAME_${game.id.slice(-1)}_WEBHOOK_SECRET</strong>
+                </div>
+            </div>
+            
+            <div class="secret-generator">
+                <div class="secret-title">🎁 Saweria Token (GAME_${game.id.slice(-1)}_SAWERIA_TOKEN)</div>
+                <div class="secret-display">
+                    <input type="text" class="secret-input" id="saweriaToken" value="${game.saweriaToken || ''}" readonly>
+                    <button class="btn btn-primary" onclick="copySecret('saweriaToken')">📋 Copy</button>
+                    <button class="btn btn-secondary" onclick="regenerateSecret('saweriaToken')">🔄 Generate</button>
+                </div>
+                <div class="help-text">
+                    ℹ️ Token ini untuk verifikasi request dari Saweria. Copy ke Railway Variables: <strong>GAME_${game.id.slice(-1)}_SAWERIA_TOKEN</strong>
+                </div>
+            </div>
+            
+            <div class="secret-generator">
+                <div class="secret-title">🔔 SocialBuzz Token (GAME_${game.id.slice(-1)}_SOCIALBUZZ_TOKEN)</div>
+                <div class="secret-display">
+                    <input type="text" class="secret-input" id="socialbuzzToken" value="${game.socialbuzzToken || ''}" readonly>
+                    <button class="btn btn-primary" onclick="copySecret('socialbuzzToken')">📋 Copy</button>
+                    <button class="btn btn-secondary" onclick="regenerateSecret('socialbuzzToken')">🔄 Generate</button>
+                </div>
+                <div class="help-text">
+                    ℹ️ Token ini untuk verifikasi request dari SocialBuzz. Copy ke Railway Variables: <strong>GAME_${game.id.slice(-1)}_SOCIALBUZZ_TOKEN</strong>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card">
             <h3>🔐 Security Status</h3>
+            <div class="info-row">
+                <span class="info-label">Webhook Secret</span>
+                <span class="info-value">
+                    <span class="badge ${game.webhookSecret ? 'badge-success' : 'badge-warning'}">
+                        ${game.webhookSecret ? '✓ Configured' : '⚠ Generate Above'}
+                    </span>
+                </span>
+            </div>
             <div class="info-row">
                 <span class="info-label">Saweria Token</span>
                 <span class="info-value">
                     <span class="badge ${game.saweriaToken ? 'badge-success' : 'badge-warning'}">
-                        ${game.saweriaToken ? '✓ Configured' : '⚠ Not Set'}
+                        ${game.saweriaToken ? '✓ Configured' : '⚠ Generate Above'}
                     </span>
                 </span>
             </div>
@@ -732,7 +876,7 @@ app.get('/dashboard', (req, res) => {
                 <span class="info-label">SocialBuzz Token</span>
                 <span class="info-value">
                     <span class="badge ${game.socialbuzzToken ? 'badge-success' : 'badge-warning'}">
-                        ${game.socialbuzzToken ? '✓ Configured' : '⚠ Not Set'}
+                        ${game.socialbuzzToken ? '✓ Configured' : '⚠ Generate Above'}
                     </span>
                 </span>
             </div>
@@ -746,26 +890,27 @@ app.get('/dashboard', (req, res) => {
             
             <div class="url-box">
                 <div class="url-label">Saweria Webhook</div>
-                <div class="url-text">${baseUrl}/${game.webhookSecret}/saweria</div>
+                <div class="url-text">${baseUrl}/${game.webhookSecret || 'GENERATE_SECRET_FIRST'}/saweria</div>
             </div>
             
             <div class="url-box">
                 <div class="url-label">SocialBuzz Webhook</div>
-                <div class="url-text">${baseUrl}/${game.webhookSecret}/socialbuzz</div>
+                <div class="url-text">${baseUrl}/${game.webhookSecret || 'GENERATE_SECRET_FIRST'}/socialbuzz</div>
             </div>
             
             <div class="url-box">
                 <div class="url-label">Test Endpoint</div>
-                <div class="url-text">${baseUrl}/${game.webhookSecret}/test?password=${encodeURIComponent(password)}</div>
+                <div class="url-text">${baseUrl}/${game.webhookSecret || 'GENERATE_SECRET_FIRST'}/test?password=${encodeURIComponent(password)}</div>
             </div>
         </div>
         
         <div class="card">
             <h3>💡 Quick Tips</h3>
             <div style="color: #94a3b8; font-size: 14px; line-height: 1.8;">
+                <p>• Generate secrets di atas lalu copy ke Railway Variables</p>
                 <p>• Donatur format: <code style="color: #10b981;">[RobloxUsername] Message</code></p>
-                <p>• Token verification otomatis</p>
-                <p>• Jangan share webhook URLs</p>
+                <p>• Jangan share webhook URLs atau secrets</p>
+                <p>• Setelah update Railway Variables, redeploy otomatis</p>
             </div>
         </div>
         
@@ -776,6 +921,54 @@ app.get('/dashboard', (req, res) => {
             </p>
         </div>
     </div>
+    
+    <script>
+        function generateRandomSecret(length = 24) {
+            const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+            let result = '';
+            for (let i = 0; i < length; i++) {
+                result += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            return result;
+        }
+        
+        function regenerateSecret(inputId) {
+            const input = document.getElementById(inputId);
+            const newSecret = generateRandomSecret();
+            input.value = newSecret;
+            
+            // Auto copy after generate
+            copySecret(inputId);
+        }
+        
+        function copySecret(inputId) {
+            const input = document.getElementById(inputId);
+            if (!input.value) {
+                regenerateSecret(inputId);
+                return;
+            }
+            
+            input.select();
+            document.execCommand('copy');
+            
+            // Show toast
+            const toast = document.getElementById('toast');
+            toast.style.display = 'block';
+            setTimeout(() => {
+                toast.style.display = 'none';
+            }, 2000);
+        }
+        
+        // Generate if empty on load
+        window.addEventListener('DOMContentLoaded', () => {
+            ['webhookSecret', 'saweriaToken', 'socialbuzzToken'].forEach(id => {
+                const input = document.getElementById(id);
+                if (!input.value || input.value === '') {
+                    input.value = generateRandomSecret();
+                }
+            });
+        });
+    </script>
 </body>
 </html>`;
     res.send(html);
