@@ -656,6 +656,12 @@ app.get('/dashboard', (req, res) => {
             font-weight: 600;
             text-transform: uppercase;
             margin-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .url-label span:first-child {
+            flex: 1;
         }
         .url-text {
             color: #10b981;
@@ -885,22 +891,31 @@ app.get('/dashboard', (req, res) => {
         <div class="card">
             <h3>🔗 Webhook URLs</h3>
             <p style="color: #94a3b8; font-size: 13px; margin-bottom: 20px;">
-                Use these URLs in your Saweria and SocialBuzz webhook settings.
+                URLs akan auto-update saat Anda generate webhook secret. Klik copy untuk menyalin URL lengkap.
             </p>
             
             <div class="url-box">
-                <div class="url-label">Saweria Webhook</div>
-                <div class="url-text">${baseUrl}/${game.webhookSecret || 'GENERATE_SECRET_FIRST'}/saweria</div>
+                <div class="url-label" style="display: flex; justify-content: space-between; align-items: center;">
+                    <span>Saweria Webhook</span>
+                    <button class="btn btn-primary" style="padding: 6px 12px; font-size: 12px;" onclick="copyUrl('saweriaUrl')">📋 Copy URL</button>
+                </div>
+                <div class="url-text" id="saweriaUrl">${baseUrl}/${game.webhookSecret || 'GENERATE_SECRET_FIRST'}/saweria</div>
             </div>
             
             <div class="url-box">
-                <div class="url-label">SocialBuzz Webhook</div>
-                <div class="url-text">${baseUrl}/${game.webhookSecret || 'GENERATE_SECRET_FIRST'}/socialbuzz</div>
+                <div class="url-label" style="display: flex; justify-content: space-between; align-items: center;">
+                    <span>SocialBuzz Webhook</span>
+                    <button class="btn btn-primary" style="padding: 6px 12px; font-size: 12px;" onclick="copyUrl('socialbuzzUrl')">📋 Copy URL</button>
+                </div>
+                <div class="url-text" id="socialbuzzUrl">${baseUrl}/${game.webhookSecret || 'GENERATE_SECRET_FIRST'}/socialbuzz</div>
             </div>
             
             <div class="url-box">
-                <div class="url-label">Test Endpoint</div>
-                <div class="url-text">${baseUrl}/${game.webhookSecret || 'GENERATE_SECRET_FIRST'}/test?password=${encodeURIComponent(password)}</div>
+                <div class="url-label" style="display: flex; justify-content: space-between; align-items: center;">
+                    <span>Test Endpoint</span>
+                    <button class="btn btn-primary" style="padding: 6px 12px; font-size: 12px;" onclick="copyUrl('testUrl')">📋 Copy URL</button>
+                </div>
+                <div class="url-text" id="testUrl">${baseUrl}/${game.webhookSecret || 'GENERATE_SECRET_FIRST'}/test?password=${encodeURIComponent(password)}</div>
             </div>
         </div>
         
@@ -923,6 +938,9 @@ app.get('/dashboard', (req, res) => {
     </div>
     
     <script>
+        const baseUrl = '${baseUrl}';
+        const password = '${encodeURIComponent(password)}';
+        
         function generateRandomSecret(length = 24) {
             const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
             let result = '';
@@ -932,10 +950,30 @@ app.get('/dashboard', (req, res) => {
             return result;
         }
         
+        function updateWebhookUrls() {
+            const webhookSecret = document.getElementById('webhookSecret').value;
+            
+            if (webhookSecret && webhookSecret !== '') {
+                document.getElementById('saweriaUrl').textContent = baseUrl + '/' + webhookSecret + '/saweria';
+                document.getElementById('socialbuzzUrl').textContent = baseUrl + '/' + webhookSecret + '/socialbuzz';
+                document.getElementById('testUrl').textContent = baseUrl + '/' + webhookSecret + '/test?password=' + password;
+            } else {
+                document.getElementById('saweriaUrl').textContent = baseUrl + '/GENERATE_SECRET_FIRST/saweria';
+                document.getElementById('socialbuzzUrl').textContent = baseUrl + '/GENERATE_SECRET_FIRST/socialbuzz';
+                document.getElementById('testUrl').textContent = baseUrl + '/GENERATE_SECRET_FIRST/test?password=' + password;
+            }
+        }
+        
         function regenerateSecret(inputId) {
             const input = document.getElementById(inputId);
             const newSecret = generateRandomSecret();
             input.value = newSecret;
+            
+            // Update webhook URLs jika webhook secret yang di-generate
+            if (inputId === 'webhookSecret') {
+                updateWebhookUrls();
+                showToast('✓ Secret generated & URLs updated!');
+            }
             
             // Auto copy after generate
             copySecret(inputId);
@@ -943,16 +981,50 @@ app.get('/dashboard', (req, res) => {
         
         function copySecret(inputId) {
             const input = document.getElementById(inputId);
-            if (!input.value) {
+            if (!input.value || input.value === '') {
                 regenerateSecret(inputId);
                 return;
             }
             
-            input.select();
-            document.execCommand('copy');
+            // Copy to clipboard
+            navigator.clipboard.writeText(input.value).then(() => {
+                showToast('✓ Copied to clipboard!');
+            }).catch(() => {
+                // Fallback for older browsers
+                input.select();
+                document.execCommand('copy');
+                showToast('✓ Copied to clipboard!');
+            });
+        }
+        
+        function copyUrl(elementId) {
+            const element = document.getElementById(elementId);
+            const text = element.textContent;
             
-            // Show toast
+            // Check if secret is generated
+            if (text.includes('GENERATE_SECRET_FIRST')) {
+                showToast('⚠ Generate webhook secret first!');
+                return;
+            }
+            
+            // Copy to clipboard
+            navigator.clipboard.writeText(text).then(() => {
+                showToast('✓ URL copied to clipboard!');
+            }).catch(() => {
+                // Fallback
+                const tempInput = document.createElement('input');
+                tempInput.value = text;
+                document.body.appendChild(tempInput);
+                tempInput.select();
+                document.execCommand('copy');
+                document.body.removeChild(tempInput);
+                showToast('✓ URL copied to clipboard!');
+            });
+        }
+        
+        function showToast(message) {
             const toast = document.getElementById('toast');
+            toast.textContent = message;
             toast.style.display = 'block';
             setTimeout(() => {
                 toast.style.display = 'none';
@@ -967,6 +1039,9 @@ app.get('/dashboard', (req, res) => {
                     input.value = generateRandomSecret();
                 }
             });
+            
+            // Update URLs on load
+            updateWebhookUrls();
         });
     </script>
 </body>
