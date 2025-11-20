@@ -17,35 +17,46 @@ const GAMES = [
         name: process.env.GAME_1_NAME || 'Game 1',
         universeId: process.env.GAME_1_UNIVERSE_ID,
         apiKey: process.env.GAME_1_API_KEY,
-        topic: process.env.GAME_1_TOPIC || 'ArchieDonationIDR'
+        topic: process.env.GAME_1_TOPIC || 'ArchieDonationIDR',
+        // Webhook tokens untuk security (optional tapi recommended)
+        saweriaToken: process.env.GAME_1_SAWERIA_TOKEN,
+        socialbuzzToken: process.env.GAME_1_SOCIALBUZZ_TOKEN
     },
     {
         id: 'game2',
         name: process.env.GAME_2_NAME || 'Game 2',
         universeId: process.env.GAME_2_UNIVERSE_ID,
         apiKey: process.env.GAME_2_API_KEY,
-        topic: process.env.GAME_2_TOPIC || 'ArchieDonationIDR'
+        topic: process.env.GAME_2_TOPIC || 'ArchieDonationIDR',
+        saweriaToken: process.env.GAME_2_SAWERIA_TOKEN,
+        socialbuzzToken: process.env.GAME_2_SOCIALBUZZ_TOKEN
     },
     {
         id: 'game3',
         name: process.env.GAME_3_NAME || 'Game 3',
         universeId: process.env.GAME_3_UNIVERSE_ID,
         apiKey: process.env.GAME_3_API_KEY,
-        topic: process.env.GAME_3_TOPIC || 'ArchieDonationIDR'
+        topic: process.env.GAME_3_TOPIC || 'ArchieDonationIDR',
+        saweriaToken: process.env.GAME_3_SAWERIA_TOKEN,
+        socialbuzzToken: process.env.GAME_3_SOCIALBUZZ_TOKEN
     },
     {
         id: 'game4',
         name: process.env.GAME_4_NAME || 'Game 4',
         universeId: process.env.GAME_4_UNIVERSE_ID,
         apiKey: process.env.GAME_4_API_KEY,
-        topic: process.env.GAME_4_TOPIC || 'ArchieDonationIDR'
+        topic: process.env.GAME_4_TOPIC || 'ArchieDonationIDR',
+        saweriaToken: process.env.GAME_4_SAWERIA_TOKEN,
+        socialbuzzToken: process.env.GAME_4_SOCIALBUZZ_TOKEN
     },
     {
         id: 'game5',
         name: process.env.GAME_5_NAME || 'Game 5',
         universeId: process.env.GAME_5_UNIVERSE_ID,
         apiKey: process.env.GAME_5_API_KEY,
-        topic: process.env.GAME_5_TOPIC || 'ArchieDonationIDR'
+        topic: process.env.GAME_5_TOPIC || 'ArchieDonationIDR',
+        saweriaToken: process.env.GAME_5_SAWERIA_TOKEN,
+        socialbuzzToken: process.env.GAME_5_SOCIALBUZZ_TOKEN
     }
 ].filter(game => game.universeId && game.apiKey);
 
@@ -69,8 +80,35 @@ GAMES.forEach((game, index) => {
     console.log(`     Universe ID: ${game.universeId}`);
     console.log(`     API Key: ${game.apiKey.substring(0, 8)}...****`);
     console.log(`     Topic: ${game.topic}`);
+    console.log(`     🔐 Saweria Token: ${game.saweriaToken ? '✅ Set' : '⚠️ Not Set (Optional)'}`);
+    console.log(`     🔐 SocialBuzz Token: ${game.socialbuzzToken ? '✅ Set' : '⚠️ Not Set (Optional)'}`);
 });
 console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+
+// 🔐 Helper: Verify Webhook Token
+function verifyWebhookToken(req, expectedToken, platform) {
+    if (!expectedToken) {
+        console.log(`⚠️ No token configured for ${platform}, skipping verification`);
+        return true; // Skip verification if no token set
+    }
+    
+    // Check berbagai format token yang mungkin dikirim
+    const authHeader = req.headers['authorization'];
+    const webhookToken = req.headers['x-webhook-token'];
+    const customToken = req.headers['x-token'];
+    const bearerToken = authHeader?.replace('Bearer ', '');
+    
+    const receivedToken = webhookToken || customToken || bearerToken || req.body?.token;
+    
+    if (!receivedToken) {
+        console.log(`❌ ${platform} token not found in request`);
+        return false;
+    }
+    
+    const isValid = receivedToken === expectedToken;
+    console.log(`🔐 ${platform} token verification: ${isValid ? '✅ Valid' : '❌ Invalid'}`);
+    return isValid;
+}
 
 // ✅ Helper: Extract username
 function extractUsername(message, donatorName) {
@@ -116,7 +154,7 @@ async function sendToRoblox(game, donationData) {
             {
                 headers: {
                     'Content-Type': 'application/json',
-                    'x-api-key': game.apiKey // ⭐ Menggunakan API key per game
+                    'x-api-key': game.apiKey
                 },
                 timeout: 10000
             }
@@ -147,6 +185,16 @@ function createWebhookEndpoints() {
         // 📥 Saweria Webhook untuk game ini
         app.post(`/${game.id}/saweria-webhook`, async (req, res) => {
             console.log(`\n📩 [${game.name.toUpperCase()}] [SAWERIA] Webhook received`);
+            
+            // 🔐 Verify token if configured
+            if (game.saweriaToken && !verifyWebhookToken(req, game.saweriaToken, 'Saweria')) {
+                console.log('❌ Unauthorized - Invalid Saweria token');
+                return res.status(401).json({
+                    success: false,
+                    error: 'Unauthorized - Invalid webhook token',
+                    game: game.name
+                });
+            }
             
             const payload = req.body;
             
@@ -200,6 +248,18 @@ function createWebhookEndpoints() {
         // 📥 SocialBuzz Webhook untuk game ini
         app.post(`/${game.id}/socialbuzz-webhook`, async (req, res) => {
             console.log(`\n📩 [${game.name.toUpperCase()}] [SOCIALBUZZ] Webhook received`);
+            console.log('📋 Headers:', JSON.stringify(req.headers, null, 2));
+            console.log('📋 Body:', JSON.stringify(req.body, null, 2));
+            
+            // 🔐 Verify token if configured
+            if (game.socialbuzzToken && !verifyWebhookToken(req, game.socialbuzzToken, 'SocialBuzz')) {
+                console.log('❌ Unauthorized - Invalid SocialBuzz token');
+                return res.status(401).json({
+                    success: false,
+                    error: 'Unauthorized - Invalid webhook token',
+                    game: game.name
+                });
+            }
             
             const payload = req.body;
             
@@ -274,12 +334,17 @@ app.get('/', (req, res) => {
     res.json({
         status: 'online',
         service: 'Archie Donation IDR Webhook - Multi Game',
-        version: '1.0.0',
+        version: '2.0.0',
+        timestamp: new Date().toISOString(),
         games: GAMES.map(g => ({
             id: g.id,
             name: g.name,
             universeId: g.universeId,
-            hasConfig: !!(g.universeId && g.apiKey)
+            hasConfig: !!(g.universeId && g.apiKey),
+            hasSecurityToken: {
+                saweria: !!g.saweriaToken,
+                socialbuzz: !!g.socialbuzzToken
+            }
         })),
         endpoints: endpoints,
         usage: {
@@ -339,7 +404,8 @@ app.post('/:gameId/test', async (req, res) => {
 app.get('/debug', (req, res) => {
     res.json({
         server: 'Archie Donation IDR Webhook - Multi Game',
-        version: '1.0.0',
+        version: '2.0.0',
+        timestamp: new Date().toISOString(),
         configuration: {
             gamesConfigured: GAMES.length
         },
@@ -349,7 +415,11 @@ app.get('/debug', (req, res) => {
             universeId: g.universeId,
             hasApiKey: !!g.apiKey,
             apiKeyPrefix: g.apiKey ? g.apiKey.substring(0, 8) + '...' : '❌ NOT SET',
-            topic: g.topic
+            topic: g.topic,
+            security: {
+                saweriaToken: g.saweriaToken ? '✅ Set' : '⚠️ Not Set',
+                socialbuzzToken: g.socialbuzzToken ? '✅ Set' : '⚠️ Not Set'
+            }
         })),
         environment: {
             nodeVersion: process.version,
@@ -399,13 +469,15 @@ app.listen(port, () => {
     console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     console.log('✅ Archie Donation IDR Webhook (Multi Game) Running!');
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log(`🌐 Port: ${port}\n`);
+    console.log(`🌐 Port: ${port}`);
+    console.log(`📅 Started: ${new Date().toISOString()}\n`);
     
     GAMES.forEach(game => {
         console.log(`🎮 ${game.name} (${game.id}):`);
         console.log(`   📡 Saweria:    http://localhost:${port}/${game.id}/saweria-webhook`);
         console.log(`   📡 SocialBuzz: http://localhost:${port}/${game.id}/socialbuzz-webhook`);
-        console.log(`   🧪 Test:       http://localhost:${port}/${game.id}/test\n`);
+        console.log(`   🧪 Test:       http://localhost:${port}/${game.id}/test`);
+        console.log(`   🔐 Security:   Saweria ${game.saweriaToken ? '✅' : '⚠️'} | SocialBuzz ${game.socialbuzzToken ? '✅' : '⚠️'}\n`);
     });
     
     console.log('📊 General:');
