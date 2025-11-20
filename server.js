@@ -17,7 +17,7 @@ app.use(express.urlencoded({ extended: true }));
 // 🔐 ADMIN PASSWORD untuk akses dashboard
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'changeme123';
 
-// 🎮 KONFIGURASI MULTIPLE GAMES dengan SECRET WEBHOOK PATH
+// 🎮 KONFIGURASI MULTIPLE GAMES dengan SECRET WEBHOOK PATH + PASSWORD PER GAME
 const GAMES = [
     {
         id: 'game1',
@@ -25,8 +25,8 @@ const GAMES = [
         universeId: process.env.GAME_1_UNIVERSE_ID,
         apiKey: process.env.GAME_1_API_KEY,
         topic: process.env.GAME_1_TOPIC || 'ArchieDonationIDR',
-        // 🔑 SECRET WEBHOOK PATH - Gunakan string random yang susah ditebak
         webhookSecret: process.env.GAME_1_WEBHOOK_SECRET || 'game1',
+        password: process.env.GAME_1_PASSWORD, // Password untuk akses dashboard game ini
         saweriaToken: process.env.GAME_1_SAWERIA_TOKEN,
         socialbuzzToken: process.env.GAME_1_SOCIALBUZZ_TOKEN
     },
@@ -37,6 +37,7 @@ const GAMES = [
         apiKey: process.env.GAME_2_API_KEY,
         topic: process.env.GAME_2_TOPIC || 'ArchieDonationIDR',
         webhookSecret: process.env.GAME_2_WEBHOOK_SECRET || 'game2',
+        password: process.env.GAME_2_PASSWORD,
         saweriaToken: process.env.GAME_2_SAWERIA_TOKEN,
         socialbuzzToken: process.env.GAME_2_SOCIALBUZZ_TOKEN
     },
@@ -47,6 +48,7 @@ const GAMES = [
         apiKey: process.env.GAME_3_API_KEY,
         topic: process.env.GAME_3_TOPIC || 'ArchieDonationIDR',
         webhookSecret: process.env.GAME_3_WEBHOOK_SECRET || 'game3',
+        password: process.env.GAME_3_PASSWORD,
         saweriaToken: process.env.GAME_3_SAWERIA_TOKEN,
         socialbuzzToken: process.env.GAME_3_SOCIALBUZZ_TOKEN
     },
@@ -57,6 +59,7 @@ const GAMES = [
         apiKey: process.env.GAME_4_API_KEY,
         topic: process.env.GAME_4_TOPIC || 'ArchieDonationIDR',
         webhookSecret: process.env.GAME_4_WEBHOOK_SECRET || 'game4',
+        password: process.env.GAME_4_PASSWORD,
         saweriaToken: process.env.GAME_4_SAWERIA_TOKEN,
         socialbuzzToken: process.env.GAME_4_SOCIALBUZZ_TOKEN
     },
@@ -67,6 +70,7 @@ const GAMES = [
         apiKey: process.env.GAME_5_API_KEY,
         topic: process.env.GAME_5_TOPIC || 'ArchieDonationIDR',
         webhookSecret: process.env.GAME_5_WEBHOOK_SECRET || 'game5',
+        password: process.env.GAME_5_PASSWORD,
         saweriaToken: process.env.GAME_5_SAWERIA_TOKEN,
         socialbuzzToken: process.env.GAME_5_SOCIALBUZZ_TOKEN
     }
