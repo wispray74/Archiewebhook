@@ -87,30 +87,65 @@ function formatRupiah(amount) {
     return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(amount);
 }
 
+// ✨ UPDATED: Enhanced error logging
 async function sendToRoblox(game, donationData) {
     const apiUrl = `https://apis.roblox.com/messaging-service/v1/universes/${game.universeId}/topics/${encodeURIComponent(game.topic)}`;
-    console.log(`📤 Sending ${formatRupiah(donationData.amount)} to ${game.name} for ${donationData.username}`);
+    console.log(`📤 [${game.name}] Sending ${formatRupiah(donationData.amount)} for ${donationData.username}`);
+    console.log(`🔗 API URL: ${apiUrl}`);
+    console.log(`🔑 API Key: ${game.apiKey.substring(0, 30)}...`);
+    console.log(`📋 Topic: ${game.topic}`);
     
-    const response = await axios.post(apiUrl, { message: JSON.stringify(donationData) }, {
-        headers: { 'Content-Type': 'application/json', 'x-api-key': game.apiKey },
-        timeout: 10000
-    });
-    
-    console.log('✅ Success');
-    return { success: true, status: response.status, data: response.data };
+    try {
+        const response = await axios.post(apiUrl, { 
+            message: JSON.stringify(donationData) 
+        }, {
+            headers: { 
+                'Content-Type': 'application/json', 
+                'x-api-key': game.apiKey 
+            },
+            timeout: 10000
+        });
+        
+        console.log(`✅ [${game.name}] Success! Status: ${response.status}`);
+        return { success: true, status: response.status, data: response.data };
+    } catch (error) {
+        console.error(`❌ [${game.name}] Failed to send to Roblox`);
+        
+        if (error.response) {
+            // Server responded with error status
+            console.error('📛 Response Status:', error.response.status);
+            console.error('📛 Response Data:', JSON.stringify(error.response.data, null, 2));
+            console.error('📛 Response Headers:', JSON.stringify(error.response.headers, null, 2));
+        } else if (error.request) {
+            // Request made but no response
+            console.error('📛 No response received from Roblox API');
+            console.error('📛 Request details:', error.message);
+        } else {
+            // Error in request setup
+            console.error('📛 Error setting up request:', error.message);
+        }
+        
+        console.error('📛 Full error:', error.toString());
+        throw error;
+    }
 }
 
 // 🔧 Webhook Routes
 GAMES.forEach(game => {
     // Saweria
     app.post(`/${game.webhookSecret}/saweria`, async (req, res) => {
-        console.log(`📩 [${game.name}] Saweria webhook`);
+        console.log(`\n📩 [${game.name}] Saweria webhook received`);
+        
         if (game.saweriaToken && !verifyWebhookToken(req, game.saweriaToken)) {
+            console.log(`❌ [${game.name}] Unauthorized - Invalid token`);
             return res.status(401).json({ success: false, error: 'Unauthorized' });
         }
         
         const payload = req.body;
+        console.log(`📦 Payload:`, JSON.stringify(payload, null, 2));
+        
         if (!payload || payload.type !== 'donation') {
+            console.log(`ℹ️ [${game.name}] Not a donation event, skipping`);
             return res.status(200).json({ success: true, message: 'OK' });
         }
         
@@ -124,23 +159,32 @@ GAMES.forEach(game => {
             email: payload.donator_email || ''
         };
         
+        console.log(`💰 Donation data:`, JSON.stringify(donationData, null, 2));
+        
         try {
             await sendToRoblox(game, donationData);
+            console.log(`✅ [${game.name}] Webhook processed successfully`);
             return res.status(200).json({ success: true, message: 'Processed' });
         } catch (error) {
+            console.error(`❌ [${game.name}] Webhook processing failed:`, error.message);
             return res.status(500).json({ success: false, error: 'Failed' });
         }
     });
     
     // SocialBuzz
     app.post(`/${game.webhookSecret}/socialbuzz`, async (req, res) => {
-        console.log(`📩 [${game.name}] SocialBuzz webhook`);
+        console.log(`\n📩 [${game.name}] SocialBuzz webhook received`);
+        
         if (game.socialbuzzToken && !verifyWebhookToken(req, game.socialbuzzToken)) {
+            console.log(`❌ [${game.name}] Unauthorized - Invalid token`);
             return res.status(401).json({ success: false, error: 'Unauthorized' });
         }
         
         const payload = req.body;
+        console.log(`📦 Payload:`, JSON.stringify(payload, null, 2));
+        
         if (!payload) {
+            console.log(`❌ [${game.name}] No payload received`);
             return res.status(400).json({ success: false, error: 'No payload' });
         }
         
@@ -157,10 +201,14 @@ GAMES.forEach(game => {
             email: payload.supporter_email || payload.email || ''
         };
         
+        console.log(`💰 Donation data:`, JSON.stringify(donationData, null, 2));
+        
         try {
             await sendToRoblox(game, donationData);
+            console.log(`✅ [${game.name}] Webhook processed successfully`);
             return res.status(200).json({ success: true, message: 'Processed' });
         } catch (error) {
+            console.error(`❌ [${game.name}] Webhook processing failed:`, error.message);
             return res.status(500).json({ success: false, error: 'Failed' });
         }
     });
@@ -171,10 +219,11 @@ GAMES.forEach(game => {
         const authGame = authenticateGame(password);
         
         if (!authGame || authGame.id !== game.id) {
+            console.log(`❌ Test endpoint - Unauthorized attempt`);
             return res.status(401).json({ success: false, error: 'Unauthorized' });
         }
         
-        console.log(`🧪 Test: ${game.name}`);
+        console.log(`\n🧪 Test endpoint - ${game.name}`);
         const testPayload = {
             username: req.body.username || 'TestUser',
             displayName: 'Test Donator',
@@ -184,11 +233,15 @@ GAMES.forEach(game => {
             message: 'Test donation'
         };
         
+        console.log(`💰 Test data:`, JSON.stringify(testPayload, null, 2));
+        
         try {
             await sendToRoblox(game, testPayload);
+            console.log(`✅ Test completed successfully`);
             res.json({ success: true, message: 'Test sent', game: game.name });
         } catch (error) {
-            res.status(500).json({ success: false, error: 'Test failed' });
+            console.error(`❌ Test failed:`, error.message);
+            res.status(500).json({ success: false, error: 'Test failed', details: error.message });
         }
     });
 });
@@ -901,4 +954,5 @@ app.use((req, res) => {
 // Start
 app.listen(port, () => {
     console.log(`✅ Server running on port ${port}`);
+    console.log(`🎮 Configured games: ${GAMES.map(g => g.name).join(', ')}`);
 });
