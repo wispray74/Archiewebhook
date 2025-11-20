@@ -649,19 +649,17 @@ app.get('/dashboard', (req, res) => {
             border-radius: 10px;
             padding: 16px;
             margin: 12px 0;
+            position: relative;
         }
         .url-label {
             color: #8b5cf6;
             font-size: 12px;
             font-weight: 600;
             text-transform: uppercase;
-            margin-bottom: 8px;
+            margin-bottom: 12px;
             display: flex;
             justify-content: space-between;
             align-items: center;
-        }
-        .url-label span:first-child {
-            flex: 1;
         }
         .url-text {
             color: #10b981;
@@ -669,6 +667,9 @@ app.get('/dashboard', (req, res) => {
             font-size: 13px;
             word-break: break-all;
             line-height: 1.6;
+            padding: 12px;
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 8px;
         }
         .badge {
             display: inline-block;
@@ -687,71 +688,26 @@ app.get('/dashboard', (req, res) => {
             color: #f59e0b;
             border: 1px solid rgba(245, 158, 11, 0.3);
         }
-        
-        /* Secret Generator */
-        .secret-generator {
-            background: rgba(139, 92, 246, 0.1);
-            border: 2px dashed rgba(139, 92, 246, 0.3);
-            border-radius: 12px;
-            padding: 20px;
-            margin-top: 16px;
-        }
-        .secret-title {
-            color: #8b5cf6;
-            font-size: 14px;
-            font-weight: 600;
-            margin-bottom: 12px;
-        }
-        .secret-display {
-            display: flex;
-            gap: 8px;
-            margin-bottom: 12px;
-        }
-        .secret-input {
-            flex: 1;
-            background: rgba(0, 0, 0, 0.4);
-            border: 1px solid rgba(139, 92, 246, 0.3);
-            border-radius: 8px;
-            padding: 12px;
-            color: #10b981;
-            font-family: 'Courier New', monospace;
-            font-size: 14px;
-            outline: none;
-        }
         .btn {
-            padding: 12px 20px;
+            padding: 8px 16px;
             border: none;
             border-radius: 8px;
-            font-size: 14px;
+            font-size: 13px;
             font-weight: 600;
             cursor: pointer;
             transition: all 0.3s;
             display: inline-flex;
             align-items: center;
-            gap: 8px;
-        }
-        .btn-primary {
+            gap: 6px;
             background: linear-gradient(135deg, #8b5cf6, #3b82f6);
             color: white;
-        }
-        .btn-secondary {
-            background: rgba(139, 92, 246, 0.2);
-            color: #8b5cf6;
-            border: 1px solid rgba(139, 92, 246, 0.3);
         }
         .btn:hover {
             transform: translateY(-2px);
             box-shadow: 0 4px 12px rgba(139, 92, 246, 0.4);
         }
-        .btn:active {
-            transform: translateY(0);
-        }
-        .help-text {
-            color: #64748b;
-            font-size: 12px;
-            margin-top: 8px;
-            line-height: 1.6;
-        }
+        .btn:active { transform: translateY(0); }
+        
         .success-toast {
             position: fixed;
             top: 20px;
@@ -783,12 +739,12 @@ app.get('/dashboard', (req, res) => {
             font-weight: 500;
         }
         .discord-link:hover { text-decoration: underline; }
+        
         @media (max-width: 768px) {
             .header { padding: 24px; }
             .header h1 { font-size: 24px; }
             .card { padding: 20px; }
             .url-text { font-size: 11px; }
-            .secret-display { flex-direction: column; }
         }
     </style>
 </head>
@@ -812,69 +768,22 @@ app.get('/dashboard', (req, res) => {
                 <span class="info-value">${game.topic}</span>
             </div>
             <div class="info-row">
-                <span class="info-label">API Key Status</span>
-                <span class="info-value"><span class="badge badge-success">✓ Active</span></span>
-            </div>
-        </div>
-        
-        <div class="card">
-            <h3>🔑 Secret Generator</h3>
-            <p style="color: #94a3b8; font-size: 13px; margin-bottom: 16px;">
-                Generate random secrets untuk webhook path dan tokens. Copy lalu paste ke Railway Variables.
-            </p>
-            
-            <div class="secret-generator">
-                <div class="secret-title">🔐 Webhook Secret (GAME_${game.id.slice(-1)}_WEBHOOK_SECRET)</div>
-                <div class="secret-display">
-                    <input type="text" class="secret-input" id="webhookSecret" value="${game.webhookSecret || ''}" readonly>
-                    <button class="btn btn-primary" onclick="copySecret('webhookSecret')">📋 Copy</button>
-                    <button class="btn btn-secondary" onclick="regenerateSecret('webhookSecret')">🔄 Generate</button>
-                </div>
-                <div class="help-text">
-                    ℹ️ Setelah generate, copy value ini ke Railway Variables dengan nama <strong>GAME_${game.id.slice(-1)}_WEBHOOK_SECRET</strong>
-                </div>
-            </div>
-            
-            <div class="secret-generator">
-                <div class="secret-title">🎁 Saweria Token (GAME_${game.id.slice(-1)}_SAWERIA_TOKEN)</div>
-                <div class="secret-display">
-                    <input type="text" class="secret-input" id="saweriaToken" value="${game.saweriaToken || ''}" readonly>
-                    <button class="btn btn-primary" onclick="copySecret('saweriaToken')">📋 Copy</button>
-                    <button class="btn btn-secondary" onclick="regenerateSecret('saweriaToken')">🔄 Generate</button>
-                </div>
-                <div class="help-text">
-                    ℹ️ Token ini untuk verifikasi request dari Saweria. Copy ke Railway Variables: <strong>GAME_${game.id.slice(-1)}_SAWERIA_TOKEN</strong>
-                </div>
-            </div>
-            
-            <div class="secret-generator">
-                <div class="secret-title">🔔 SocialBuzz Token (GAME_${game.id.slice(-1)}_SOCIALBUZZ_TOKEN)</div>
-                <div class="secret-display">
-                    <input type="text" class="secret-input" id="socialbuzzToken" value="${game.socialbuzzToken || ''}" readonly>
-                    <button class="btn btn-primary" onclick="copySecret('socialbuzzToken')">📋 Copy</button>
-                    <button class="btn btn-secondary" onclick="regenerateSecret('socialbuzzToken')">🔄 Generate</button>
-                </div>
-                <div class="help-text">
-                    ℹ️ Token ini untuk verifikasi request dari SocialBuzz. Copy ke Railway Variables: <strong>GAME_${game.id.slice(-1)}_SOCIALBUZZ_TOKEN</strong>
-                </div>
+                <span class="info-label">Webhook Secret</span>
+                <span class="info-value">
+                    <span class="badge ${game.webhookSecret ? 'badge-success' : 'badge-warning'}">
+                        ${game.webhookSecret ? '✓ Configured' : '⚠ Not Set in Railway'}
+                    </span>
+                </span>
             </div>
         </div>
         
         <div class="card">
             <h3>🔐 Security Status</h3>
             <div class="info-row">
-                <span class="info-label">Webhook Secret</span>
-                <span class="info-value">
-                    <span class="badge ${game.webhookSecret ? 'badge-success' : 'badge-warning'}">
-                        ${game.webhookSecret ? '✓ Configured' : '⚠ Generate Above'}
-                    </span>
-                </span>
-            </div>
-            <div class="info-row">
                 <span class="info-label">Saweria Token</span>
                 <span class="info-value">
                     <span class="badge ${game.saweriaToken ? 'badge-success' : 'badge-warning'}">
-                        ${game.saweriaToken ? '✓ Configured' : '⚠ Generate Above'}
+                        ${game.saweriaToken ? '✓ Configured' : '⚠ Optional'}
                     </span>
                 </span>
             </div>
@@ -882,7 +791,7 @@ app.get('/dashboard', (req, res) => {
                 <span class="info-label">SocialBuzz Token</span>
                 <span class="info-value">
                     <span class="badge ${game.socialbuzzToken ? 'badge-success' : 'badge-warning'}">
-                        ${game.socialbuzzToken ? '✓ Configured' : '⚠ Generate Above'}
+                        ${game.socialbuzzToken ? '✓ Configured' : '⚠ Optional'}
                     </span>
                 </span>
             </div>
@@ -891,41 +800,51 @@ app.get('/dashboard', (req, res) => {
         <div class="card">
             <h3>🔗 Webhook URLs</h3>
             <p style="color: #94a3b8; font-size: 13px; margin-bottom: 20px;">
-                URLs akan auto-update saat Anda generate webhook secret. Klik copy untuk menyalin URL lengkap.
+                Gunakan URL berikut di settings Saweria dan SocialBuzz. Klik "Copy" untuk menyalin.
             </p>
             
             <div class="url-box">
-                <div class="url-label" style="display: flex; justify-content: space-between; align-items: center;">
-                    <span>Saweria Webhook</span>
-                    <button class="btn btn-primary" style="padding: 6px 12px; font-size: 12px;" onclick="copyUrl('saweriaUrl')">📋 Copy URL</button>
+                <div class="url-label">
+                    <span>📡 Saweria Webhook</span>
+                    <button class="btn" onclick="copyUrl('saweriaUrl')">📋 Copy</button>
                 </div>
-                <div class="url-text" id="saweriaUrl">${baseUrl}/${game.webhookSecret || 'GENERATE_SECRET_FIRST'}/saweria</div>
+                <div class="url-text" id="saweriaUrl">${baseUrl}/${game.webhookSecret || 'SET_WEBHOOK_SECRET_IN_RAILWAY'}/saweria</div>
             </div>
             
             <div class="url-box">
-                <div class="url-label" style="display: flex; justify-content: space-between; align-items: center;">
-                    <span>SocialBuzz Webhook</span>
-                    <button class="btn btn-primary" style="padding: 6px 12px; font-size: 12px;" onclick="copyUrl('socialbuzzUrl')">📋 Copy URL</button>
+                <div class="url-label">
+                    <span>📡 SocialBuzz Webhook</span>
+                    <button class="btn" onclick="copyUrl('socialbuzzUrl')">📋 Copy</button>
                 </div>
-                <div class="url-text" id="socialbuzzUrl">${baseUrl}/${game.webhookSecret || 'GENERATE_SECRET_FIRST'}/socialbuzz</div>
+                <div class="url-text" id="socialbuzzUrl">${baseUrl}/${game.webhookSecret || 'SET_WEBHOOK_SECRET_IN_RAILWAY'}/socialbuzz</div>
             </div>
             
             <div class="url-box">
-                <div class="url-label" style="display: flex; justify-content: space-between; align-items: center;">
-                    <span>Test Endpoint</span>
-                    <button class="btn btn-primary" style="padding: 6px 12px; font-size: 12px;" onclick="copyUrl('testUrl')">📋 Copy URL</button>
+                <div class="url-label">
+                    <span>🧪 Test Endpoint</span>
+                    <button class="btn" onclick="copyUrl('testUrl')">📋 Copy</button>
                 </div>
-                <div class="url-text" id="testUrl">${baseUrl}/${game.webhookSecret || 'GENERATE_SECRET_FIRST'}/test?password=${encodeURIComponent(password)}</div>
+                <div class="url-text" id="testUrl">${baseUrl}/${game.webhookSecret || 'SET_WEBHOOK_SECRET_IN_RAILWAY'}/test?password=${encodeURIComponent(password)}</div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h3>⚙️ Railway Variables</h3>
+            <div style="color: #94a3b8; font-size: 14px; line-height: 1.8;">
+                <p style="margin-bottom: 12px;">Pastikan variables berikut sudah di-set di Railway:</p>
+                <p>• <code style="color: #8b5cf6;">GAME_${game.id.slice(-1)}_WEBHOOK_SECRET</code> = random string (contoh: med9082xyz8513abc)</p>
+                <p>• <code style="color: #8b5cf6;">GAME_${game.id.slice(-1)}_SAWERIA_TOKEN</code> = token dari Saweria (optional)</p>
+                <p>• <code style="color: #8b5cf6;">GAME_${game.id.slice(-1)}_SOCIALBUZZ_TOKEN</code> = token dari SocialBuzz (optional)</p>
             </div>
         </div>
         
         <div class="card">
             <h3>💡 Quick Tips</h3>
             <div style="color: #94a3b8; font-size: 14px; line-height: 1.8;">
-                <p>• Generate secrets di atas lalu copy ke Railway Variables</p>
                 <p>• Donatur format: <code style="color: #10b981;">[RobloxUsername] Message</code></p>
-                <p>• Jangan share webhook URLs atau secrets</p>
-                <p>• Setelah update Railway Variables, redeploy otomatis</p>
+                <p>• Webhook secret minimal 16 karakter</p>
+                <p>• Token verification otomatis jika di-set</p>
+                <p>• Jangan share webhook URLs ke siapapun</p>
             </div>
         </div>
         
@@ -938,80 +857,18 @@ app.get('/dashboard', (req, res) => {
     </div>
     
     <script>
-        const baseUrl = '${baseUrl}';
-        const password = '${encodeURIComponent(password)}';
-        
-        function generateRandomSecret(length = 24) {
-            const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
-            let result = '';
-            for (let i = 0; i < length; i++) {
-                result += chars.charAt(Math.floor(Math.random() * chars.length));
-            }
-            return result;
-        }
-        
-        function updateWebhookUrls() {
-            const webhookSecret = document.getElementById('webhookSecret').value;
-            
-            if (webhookSecret && webhookSecret !== '') {
-                document.getElementById('saweriaUrl').textContent = baseUrl + '/' + webhookSecret + '/saweria';
-                document.getElementById('socialbuzzUrl').textContent = baseUrl + '/' + webhookSecret + '/socialbuzz';
-                document.getElementById('testUrl').textContent = baseUrl + '/' + webhookSecret + '/test?password=' + password;
-            } else {
-                document.getElementById('saweriaUrl').textContent = baseUrl + '/GENERATE_SECRET_FIRST/saweria';
-                document.getElementById('socialbuzzUrl').textContent = baseUrl + '/GENERATE_SECRET_FIRST/socialbuzz';
-                document.getElementById('testUrl').textContent = baseUrl + '/GENERATE_SECRET_FIRST/test?password=' + password;
-            }
-        }
-        
-        function regenerateSecret(inputId) {
-            const input = document.getElementById(inputId);
-            const newSecret = generateRandomSecret();
-            input.value = newSecret;
-            
-            // Update webhook URLs jika webhook secret yang di-generate
-            if (inputId === 'webhookSecret') {
-                updateWebhookUrls();
-                showToast('✓ Secret generated & URLs updated!');
-            }
-            
-            // Auto copy after generate
-            copySecret(inputId);
-        }
-        
-        function copySecret(inputId) {
-            const input = document.getElementById(inputId);
-            if (!input.value || input.value === '') {
-                regenerateSecret(inputId);
-                return;
-            }
-            
-            // Copy to clipboard
-            navigator.clipboard.writeText(input.value).then(() => {
-                showToast('✓ Copied to clipboard!');
-            }).catch(() => {
-                // Fallback for older browsers
-                input.select();
-                document.execCommand('copy');
-                showToast('✓ Copied to clipboard!');
-            });
-        }
-        
         function copyUrl(elementId) {
             const element = document.getElementById(elementId);
             const text = element.textContent;
             
-            // Check if secret is generated
-            if (text.includes('GENERATE_SECRET_FIRST')) {
-                showToast('⚠ Generate webhook secret first!');
+            if (text.includes('SET_WEBHOOK_SECRET_IN_RAILWAY')) {
+                showToast('⚠ Set WEBHOOK_SECRET in Railway first!');
                 return;
             }
             
-            // Copy to clipboard
             navigator.clipboard.writeText(text).then(() => {
                 showToast('✓ URL copied to clipboard!');
             }).catch(() => {
-                // Fallback
                 const tempInput = document.createElement('input');
                 tempInput.value = text;
                 document.body.appendChild(tempInput);
@@ -1030,19 +887,6 @@ app.get('/dashboard', (req, res) => {
                 toast.style.display = 'none';
             }, 2000);
         }
-        
-        // Generate if empty on load
-        window.addEventListener('DOMContentLoaded', () => {
-            ['webhookSecret', 'saweriaToken', 'socialbuzzToken'].forEach(id => {
-                const input = document.getElementById(id);
-                if (!input.value || input.value === '') {
-                    input.value = generateRandomSecret();
-                }
-            });
-            
-            // Update URLs on load
-            updateWebhookUrls();
-        });
     </script>
 </body>
 </html>`;
