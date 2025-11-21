@@ -1254,7 +1254,7 @@ app.get('/dashboard', (req, res) => {
                 <p>• Webhook secret minimal 16 karakter</p>
                 <p>• Token verification otomatis jika di-set</p>
                 <p>• Jangan share webhook URLs ke siapapun</p>
-                <p>• Gunakan tombol "Change Password" untuk ganti password tanpa Railway</p>
+                <p>• Gunakan tombol "Change Password" untuk ganti password</p>
             </div>
         </div>
     </div>
