@@ -1,34 +1,25 @@
 {
-  "name": "archie-donation-idr-webhook",
+  "name": "Archie-feature-webhook",
   "version": "1.0.0",
-  "description": "Archie Donation IDR - Multi-platform webhook server for Roblox (Saweria & SocialBuzz)",
+  "description": "Multi-feature webhook system with license management",
   "main": "server.js",
-  "type": "commonjs",
   "scripts": {
-    "start": "node server.js",
-    "dev": "nodemon server.js"
+    "start": "node server.js"
   },
   "dependencies": {
     "express": "^4.18.2",
     "axios": "^1.6.0"
   },
-  "devDependencies": {
-    "nodemon": "^3.0.0"
-  },
   "engines": {
-    "node": ">=18.0.0",
-    "npm": ">=8.0.0"
+    "node": ">=18.0.0"
   },
   "keywords": [
-    "archie",
-    "donation",
-    "idr",
-    "saweria",
-    "socialbuzz",
-    "roblox",
     "webhook",
-    "railway"
+    "roblox",
+    "license",
+    "saweria",
+    "socialbuzz"
   ],
-  "author": "Archie Team",
+  "author": "Archie",
   "license": "MIT"
 }
