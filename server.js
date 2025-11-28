@@ -14,19 +14,14 @@ app.use(express.json({ verify: (req, res, buf, encoding) => {
 }}));
 app.use(express.urlencoded({ extended: true }));
 
-// 📁 Database file paths
 const DB_FILE = path.join(__dirname, 'users.json');
 const LICENSE_FILE = path.join(__dirname, 'licenses.json');
 
-// 🔧 Database helper functions
 function readDB() {
     try {
         if (!fs.existsSync(DB_FILE)) {
             const initialData = {
-                admin: {
-                    username: process.env.ADMIN_USERNAME || 'admin',
-                    password: process.env.ADMIN_PASSWORD || 'admin123'
-                },
+                admin: { username: process.env.ADMIN_USERNAME || 'admin', password: process.env.ADMIN_PASSWORD || 'admin123' },
                 games: []
             };
             fs.writeFileSync(DB_FILE, JSON.stringify(initialData, null, 2));
@@ -49,15 +44,10 @@ function writeDB(data) {
     }
 }
 
-// 🔐 License System Functions
 function readLicenses() {
     try {
         if (!fs.existsSync(LICENSE_FILE)) {
-            const initialData = {
-                licenses: {},
-                scriptVersion: "1.0.0",
-                forceUpdate: false
-            };
+            const initialData = { licenses: {}, scriptVersion: "1.0.0", forceUpdate: false };
             fs.writeFileSync(LICENSE_FILE, JSON.stringify(initialData, null, 2));
             return initialData;
         }
@@ -86,7 +76,6 @@ function generateLicenseKey() {
     return `${prefix}-${random1}-${random2}-${random3}`;
 }
 
-// 🎮 Initialize games from environment variables and database
 function initializeGames() {
     const db = readDB();
     const envGames = [
@@ -101,30 +90,6 @@ function initializeGames() {
             saweriaToken: process.env.GAME_1_SAWERIA_TOKEN || '',
             socialbuzzToken: process.env.GAME_1_SOCIALBUZZ_TOKEN || '',
             musicLicenseKey: process.env.GAME_1_MUSIC_LICENSE || ''
-        },
-        {
-            id: 'game2',
-            name: process.env.GAME_2_NAME || 'Game 2',
-            universeId: process.env.GAME_2_UNIVERSE_ID,
-            apiKey: process.env.GAME_2_API_KEY,
-            topic: process.env.GAME_2_TOPIC || 'ArchieDonationIDR',
-            webhookSecret: process.env.GAME_2_WEBHOOK_SECRET,
-            password: process.env.GAME_2_PASSWORD,
-            saweriaToken: process.env.GAME_2_SAWERIA_TOKEN || '',
-            socialbuzzToken: process.env.GAME_2_SOCIALBUZZ_TOKEN || '',
-            musicLicenseKey: process.env.GAME_2_MUSIC_LICENSE || ''
-        },
-        {
-            id: 'game3',
-            name: process.env.GAME_3_NAME || 'Game 3',
-            universeId: process.env.GAME_3_UNIVERSE_ID,
-            apiKey: process.env.GAME_3_API_KEY,
-            topic: process.env.GAME_3_TOPIC || 'ArchieDonationIDR',
-            webhookSecret: process.env.GAME_3_WEBHOOK_SECRET,
-            password: process.env.GAME_3_PASSWORD,
-            saweriaToken: process.env.GAME_3_SAWERIA_TOKEN || '',
-            socialbuzzToken: process.env.GAME_3_SOCIALBUZZ_TOKEN || '',
-            musicLicenseKey: process.env.GAME_3_MUSIC_LICENSE || ''
         }
     ].filter(game => game.universeId && game.apiKey && game.webhookSecret && game.password);
 
@@ -152,7 +117,6 @@ function initializeGames() {
 
     db.games = mergedGames;
     writeDB(db);
-
     return mergedGames;
 }
 
@@ -163,9 +127,8 @@ if (GAMES.length === 0) {
     process.exit(1);
 }
 
-console.log('🎮 Archie Webhook - ' + GAMES.length + ' games configured');
+console.log('🎮 Multi-Feature System - ' + GAMES.length + ' games configured');
 
-// 🔐 Auth Helpers
 function authenticateGame(password) {
     return GAMES.find(game => game.password && game.password === password);
 }
@@ -184,7 +147,6 @@ function updateGameLastActive(gameId) {
     }
 }
 
-// Helper Functions
 function verifyWebhookToken(req, expectedToken) {
     if (!expectedToken) return true;
     const token = req.headers['x-webhook-token'] || req.headers['authorization']?.replace('Bearer ', '') || req.body?.token;
@@ -211,13 +173,8 @@ async function sendToRoblox(game, donationData) {
     console.log(`📤 [${game.name}] Sending ${formatRupiah(donationData.amount)} for ${donationData.username}`);
     
     try {
-        const response = await axios.post(apiUrl, { 
-            message: JSON.stringify(donationData) 
-        }, {
-            headers: { 
-                'Content-Type': 'application/json', 
-                'x-api-key': game.apiKey 
-            },
+        const response = await axios.post(apiUrl, { message: JSON.stringify(donationData) }, {
+            headers: { 'Content-Type': 'application/json', 'x-api-key': game.apiKey },
             timeout: 10000
         });
         
@@ -234,59 +191,30 @@ async function sendToRoblox(game, donationData) {
     }
 }
 
-// ============================================
-// 🔐 LICENSE SYSTEM ENDPOINTS
-// ============================================
-
-// Verify License (Called from Roblox)
+// LICENSE VERIFICATION
 app.post('/api/license/verify', (req, res) => {
     const { licenseKey, universeId, placeId } = req.body;
     
     if (!licenseKey || !universeId) {
-        return res.status(400).json({ 
-            valid: false, 
-            error: 'Missing parameters',
-            forceStop: true 
-        });
+        return res.status(400).json({ valid: false, error: 'Missing parameters', forceStop: true });
     }
     
     const licensesData = readLicenses();
     const license = licensesData.licenses[licenseKey];
     
-    // License tidak ditemukan
     if (!license) {
-        console.log(`❌ Invalid license attempt: ${licenseKey} from Universe ${universeId}`);
-        return res.status(401).json({ 
-            valid: false, 
-            error: 'Invalid license key',
-            forceStop: true 
-        });
+        console.log(`❌ Invalid license: ${licenseKey}`);
+        return res.status(401).json({ valid: false, error: 'Invalid license key', forceStop: true });
     }
     
-    // License tidak aktif
     if (!license.active) {
-        console.log(`⚠️ Disabled license attempt: ${licenseKey}`);
-        return res.status(401).json({ 
-            valid: false, 
-            error: 'License has been disabled',
-            forceStop: true 
-        });
+        return res.status(401).json({ valid: false, error: 'License disabled', forceStop: true });
     }
     
-    // Cek expiry date
-    if (license.expiryDate) {
-        const expiryDate = new Date(license.expiryDate);
-        if (expiryDate < new Date()) {
-            console.log(`⏰ Expired license attempt: ${licenseKey}`);
-            return res.status(401).json({ 
-                valid: false, 
-                error: 'License has expired',
-                forceStop: true 
-            });
-        }
+    if (license.expiryDate && new Date(license.expiryDate) < new Date()) {
+        return res.status(401).json({ valid: false, error: 'License expired', forceStop: true });
     }
     
-    // HWID Lock - Jika belum ada universeId terdaftar, daftarkan
     if (!license.universeId) {
         license.universeId = universeId;
         license.firstActivation = new Date().toISOString();
@@ -294,25 +222,16 @@ app.post('/api/license/verify', (req, res) => {
         console.log(`🔒 License ${licenseKey} locked to Universe ${universeId}`);
     }
     
-    // Cek HWID mismatch
     if (license.universeId !== universeId) {
-        console.log(`🚫 HWID mismatch: ${licenseKey} | Expected: ${license.universeId} | Got: ${universeId}`);
-        return res.status(401).json({ 
-            valid: false, 
-            error: 'License already used in another game',
-            forceStop: true 
-        });
+        console.log(`🚫 HWID mismatch: ${licenseKey}`);
+        return res.status(401).json({ valid: false, error: 'License already used in another game', forceStop: true });
     }
     
-    // Update last verified
     license.lastVerified = new Date().toISOString();
     license.verificationCount = (license.verificationCount || 0) + 1;
-    if (placeId) {
-        license.placeId = placeId;
-    }
+    if (placeId) license.placeId = placeId;
     writeLicenses(licensesData);
     
-    // Success response
     res.json({ 
         valid: true,
         owner: license.owner,
@@ -323,7 +242,6 @@ app.post('/api/license/verify', (req, res) => {
     });
 });
 
-// Check for updates (Called from Roblox)
 app.get('/api/script/version', (req, res) => {
     const licensesData = readLicenses();
     res.json({
@@ -333,247 +251,12 @@ app.get('/api/script/version', (req, res) => {
     });
 });
 
-// ============================================
-// 🔐 ADMIN LICENSE MANAGEMENT
-// ============================================
-
-// Get all licenses
-app.get('/api/admin/licenses', (req, res) => {
-    const token = req.query.token;
-    if (!token) {
-        return res.status(401).json({ success: false, error: 'Unauthorized' });
-    }
-    
-    try {
-        const decoded = Buffer.from(token, 'base64').toString('utf-8');
-        const [username, password] = decoded.split(':');
-        
-        if (!authenticateAdmin(username, password)) {
-            return res.status(401).json({ success: false, error: 'Unauthorized' });
-        }
-        
-        const licensesData = readLicenses();
-        const licenses = Object.entries(licensesData.licenses).map(([key, data]) => ({
-            licenseKey: key,
-            ...data
-        }));
-        
-        res.json({ 
-            success: true, 
-            licenses,
-            scriptVersion: licensesData.scriptVersion,
-            forceUpdate: licensesData.forceUpdate
-        });
-    } catch (error) {
-        res.status(401).json({ success: false, error: 'Invalid token' });
-    }
-});
-
-// Create new license
-app.post('/api/admin/licenses/create', (req, res) => {
-    const { token, owner, expiryDays, notes } = req.body;
-    
-    if (!token) {
-        return res.status(401).json({ success: false, error: 'Unauthorized' });
-    }
-    
-    try {
-        const decoded = Buffer.from(token, 'base64').toString('utf-8');
-        const [username, password] = decoded.split(':');
-        
-        if (!authenticateAdmin(username, password)) {
-            return res.status(401).json({ success: false, error: 'Unauthorized' });
-        }
-        
-        const licenseKey = generateLicenseKey();
-        const licensesData = readLicenses();
-        
-        let expiryDate = null;
-        if (expiryDays && expiryDays > 0) {
-            expiryDate = new Date();
-            expiryDate.setDate(expiryDate.getDate() + parseInt(expiryDays));
-            expiryDate = expiryDate.toISOString();
-        }
-        
-        licensesData.licenses[licenseKey] = {
-            owner: owner || 'Unknown',
-            active: true,
-            createdAt: new Date().toISOString(),
-            expiryDate: expiryDate,
-            universeId: null,
-            placeId: null,
-            firstActivation: null,
-            lastVerified: null,
-            verificationCount: 0,
-            notes: notes || ''
-        };
-        
-        writeLicenses(licensesData);
-        
-        console.log(`✅ New license created: ${licenseKey} for ${owner}`);
-        
-        res.json({ 
-            success: true, 
-            licenseKey,
-            message: 'License created successfully'
-        });
-    } catch (error) {
-        res.status(401).json({ success: false, error: 'Invalid token' });
-    }
-});
-
-// Toggle license active status
-app.post('/api/admin/licenses/toggle', (req, res) => {
-    const { token, licenseKey } = req.body;
-    
-    if (!token) {
-        return res.status(401).json({ success: false, error: 'Unauthorized' });
-    }
-    
-    try {
-        const decoded = Buffer.from(token, 'base64').toString('utf-8');
-        const [username, password] = decoded.split(':');
-        
-        if (!authenticateAdmin(username, password)) {
-            return res.status(401).json({ success: false, error: 'Unauthorized' });
-        }
-        
-        const licensesData = readLicenses();
-        
-        if (!licensesData.licenses[licenseKey]) {
-            return res.json({ success: false, error: 'License not found' });
-        }
-        
-        licensesData.licenses[licenseKey].active = !licensesData.licenses[licenseKey].active;
-        writeLicenses(licensesData);
-        
-        const status = licensesData.licenses[licenseKey].active ? 'enabled' : 'disabled';
-        console.log(`🔄 License ${licenseKey} ${status}`);
-        
-        res.json({ 
-            success: true,
-            active: licensesData.licenses[licenseKey].active,
-            message: `License ${status} successfully`
-        });
-    } catch (error) {
-        res.status(401).json({ success: false, error: 'Invalid token' });
-    }
-});
-
-// Delete license
-app.post('/api/admin/licenses/delete', (req, res) => {
-    const { token, licenseKey } = req.body;
-    
-    if (!token) {
-        return res.status(401).json({ success: false, error: 'Unauthorized' });
-    }
-    
-    try {
-        const decoded = Buffer.from(token, 'base64').toString('utf-8');
-        const [username, password] = decoded.split(':');
-        
-        if (!authenticateAdmin(username, password)) {
-            return res.status(401).json({ success: false, error: 'Unauthorized' });
-        }
-        
-        const licensesData = readLicenses();
-        
-        if (!licensesData.licenses[licenseKey]) {
-            return res.json({ success: false, error: 'License not found' });
-        }
-        
-        delete licensesData.licenses[licenseKey];
-        writeLicenses(licensesData);
-        
-        console.log(`🗑️ License deleted: ${licenseKey}`);
-        
-        res.json({ 
-            success: true,
-            message: 'License deleted successfully'
-        });
-    } catch (error) {
-        res.status(401).json({ success: false, error: 'Invalid token' });
-    }
-});
-
-// Update script version
-app.post('/api/admin/version/update', (req, res) => {
-    const { token, version, forceUpdate, updateMessage } = req.body;
-    
-    if (!token) {
-        return res.status(401).json({ success: false, error: 'Unauthorized' });
-    }
-    
-    try {
-        const decoded = Buffer.from(token, 'base64').toString('utf-8');
-        const [username, password] = decoded.split(':');
-        
-        if (!authenticateAdmin(username, password)) {
-            return res.status(401).json({ success: false, error: 'Unauthorized' });
-        }
-        
-        const licensesData = readLicenses();
-        licensesData.scriptVersion = version;
-        licensesData.forceUpdate = forceUpdate || false;
-        licensesData.updateMessage = updateMessage || 'New update available';
-        writeLicenses(licensesData);
-        
-        console.log(`📦 Script version updated to ${version}`);
-        
-        res.json({ 
-            success: true,
-            message: 'Version updated successfully'
-        });
-    } catch (error) {
-        res.status(401).json({ success: false, error: 'Invalid token' });
-    }
-});
-
-// Reset HWID for license
-app.post('/api/admin/licenses/reset-hwid', (req, res) => {
-    const { token, licenseKey } = req.body;
-    
-    if (!token) {
-        return res.status(401).json({ success: false, error: 'Unauthorized' });
-    }
-    
-    try {
-        const decoded = Buffer.from(token, 'base64').toString('utf-8');
-        const [username, password] = decoded.split(':');
-        
-        if (!authenticateAdmin(username, password)) {
-            return res.status(401).json({ success: false, error: 'Unauthorized' });
-        }
-        
-        const licensesData = readLicenses();
-        
-        if (!licensesData.licenses[licenseKey]) {
-            return res.json({ success: false, error: 'License not found' });
-        }
-        
-        licensesData.licenses[licenseKey].universeId = null;
-        licensesData.licenses[licenseKey].placeId = null;
-        licensesData.licenses[licenseKey].firstActivation = null;
-        writeLicenses(licensesData);
-        
-        console.log(`🔓 HWID reset for license: ${licenseKey}`);
-        
-        res.json({ 
-            success: true,
-            message: 'HWID reset successfully'
-        });
-    } catch (error) {
-        res.status(401).json({ success: false, error: 'Invalid token' });
-    }
-});
-
-// Original webhook routes (keep as is)
+// WEBHOOK ROUTES
 GAMES.forEach(game => {
     app.post(`/${game.webhookSecret}/saweria`, async (req, res) => {
         console.log(`\n📩 [${game.name}] Saweria webhook received`);
         
         if (game.saweriaToken && !verifyWebhookToken(req, game.saweriaToken)) {
-            console.log(`❌ [${game.name}] Unauthorized - Invalid token`);
             return res.status(401).json({ success: false, error: 'Unauthorized' });
         }
         
@@ -604,7 +287,6 @@ GAMES.forEach(game => {
         console.log(`\n📩 [${game.name}] SocialBuzz webhook received`);
         
         if (game.socialbuzzToken && !verifyWebhookToken(req, game.socialbuzzToken)) {
-            console.log(`❌ [${game.name}] Unauthorized - Invalid token`);
             return res.status(401).json({ success: false, error: 'Unauthorized' });
         }
         
@@ -633,51 +315,15 @@ GAMES.forEach(game => {
             return res.status(500).json({ success: false, error: 'Failed' });
         }
     });
-    
-    app.post(`/${game.webhookSecret}/test`, async (req, res) => {
-        const password = req.query.password || req.body?.password;
-        const authGame = authenticateGame(password);
-        
-        if (!authGame || authGame.id !== game.id) {
-            return res.status(401).json({ success: false, error: 'Unauthorized' });
-        }
-        
-        console.log(`\n🧪 Test endpoint - ${game.name}`);
-        const testPayload = {
-            username: req.body.username || 'TestUser',
-            displayName: 'Test Donator',
-            amount: parseInt(req.body.amount) || 25000,
-            timestamp: Math.floor(Date.now() / 1000),
-            source: 'Test',
-            message: 'Test donation'
-        };
-        
-        try {
-            await sendToRoblox(game, testPayload);
-            res.json({ success: true, message: 'Test sent', game: game.name });
-        } catch (error) {
-            res.status(500).json({ success: false, error: 'Test failed', details: error.message });
-        }
-    });
 });
 
-// Homepage and other routes remain the same as original
-app.get('/', (req, res) => {
-    res.send('<h1>Archie Webhook System with License Management</h1><p>Access /admin/dashboard for license management</p>');
-});
-
+// USER APIS
 app.post('/api/auth', (req, res) => {
     const { password } = req.body;
     const game = authenticateGame(password);
-    
-    if (game) {
-        res.json({ success: true });
-    } else {
-        res.json({ success: false });
-    }
+    res.json({ success: !!game });
 });
 
-// 🔐 API: Get User Dashboard Data
 app.get('/api/user/dashboard', (req, res) => {
     const password = req.query.password;
     const game = authenticateGame(password);
@@ -704,17 +350,12 @@ app.get('/api/user/dashboard', (req, res) => {
     });
 });
 
-// 🔐 API: Get Music License Info for User
 app.get('/api/user/music-license', (req, res) => {
     const password = req.query.password;
     const game = authenticateGame(password);
     
-    if (!game) {
+    if (!game || !game.musicLicenseKey) {
         return res.status(401).json({ success: false, error: 'Unauthorized' });
-    }
-    
-    if (!game.musicLicenseKey) {
-        return res.json({ success: false, error: 'No music license configured' });
     }
     
     const licensesData = readLicenses();
@@ -738,17 +379,12 @@ app.get('/api/user/music-license', (req, res) => {
     });
 });
 
-// 🔐 API: Reset HWID for User's Music License
 app.post('/api/user/reset-hwid', (req, res) => {
     const { password, licenseKey } = req.body;
     const game = authenticateGame(password);
     
-    if (!game) {
+    if (!game || game.musicLicenseKey !== licenseKey) {
         return res.status(401).json({ success: false, error: 'Unauthorized' });
-    }
-    
-    if (game.musicLicenseKey !== licenseKey) {
-        return res.status(401).json({ success: false, error: 'License key mismatch' });
     }
     
     const licensesData = readLicenses();
@@ -763,13 +399,41 @@ app.post('/api/user/reset-hwid', (req, res) => {
     license.firstActivation = null;
     
     if (writeLicenses(licensesData)) {
-        console.log(`🔓 [USER] HWID reset for license: ${licenseKey} by ${game.name}`);
+        console.log(`🔓 [USER] HWID reset: ${licenseKey}`);
         res.json({ success: true, message: 'HWID reset successfully' });
     } else {
-        res.json({ success: false, error: 'Failed to save changes' });
+        res.json({ success: false, error: 'Failed to save' });
     }
 });
 
+app.post('/api/user/change-password', (req, res) => {
+    const { currentPassword, newPassword } = req.body;
+    
+    if (!newPassword || newPassword.length < 6) {
+        return res.json({ success: false, error: 'Password must be at least 6 characters' });
+    }
+    
+    const game = authenticateGame(currentPassword);
+    if (!game) {
+        return res.json({ success: false, error: 'Current password is incorrect' });
+    }
+    
+    const db = readDB();
+    const dbGame = db.games.find(g => g.id === game.id);
+    if (dbGame) {
+        dbGame.password = newPassword;
+        if (writeDB(db)) {
+            GAMES = initializeGames();
+            res.json({ success: true, message: 'Password changed successfully' });
+        } else {
+            res.json({ success: false, error: 'Failed to save password' });
+        }
+    } else {
+        res.json({ success: false, error: 'Game not found' });
+    }
+});
+
+// ADMIN APIS
 app.post('/api/admin/auth', (req, res) => {
     const { username, password } = req.body;
     
@@ -781,17 +445,214 @@ app.post('/api/admin/auth', (req, res) => {
     }
 });
 
-// 📊 User Dashboard
+app.get('/api/admin/licenses', (req, res) => {
+    const token = req.query.token;
+    if (!token) return res.status(401).json({ success: false });
+    
+    try {
+        const decoded = Buffer.from(token, 'base64').toString('utf-8');
+        const [username, password] = decoded.split(':');
+        
+        if (!authenticateAdmin(username, password)) {
+            return res.status(401).json({ success: false });
+        }
+        
+        const licensesData = readLicenses();
+        const licenses = Object.entries(licensesData.licenses).map(([key, data]) => ({
+            licenseKey: key,
+            ...data
+        }));
+        
+        res.json({ 
+            success: true, 
+            licenses,
+            scriptVersion: licensesData.scriptVersion,
+            forceUpdate: licensesData.forceUpdate
+        });
+    } catch (error) {
+        res.status(401).json({ success: false });
+    }
+});
+
+app.post('/api/admin/licenses/create', (req, res) => {
+    const { token, owner, expiryDays, notes } = req.body;
+    
+    if (!token) return res.status(401).json({ success: false });
+    
+    try {
+        const decoded = Buffer.from(token, 'base64').toString('utf-8');
+        const [username, password] = decoded.split(':');
+        
+        if (!authenticateAdmin(username, password)) {
+            return res.status(401).json({ success: false });
+        }
+        
+        const licenseKey = generateLicenseKey();
+        const licensesData = readLicenses();
+        
+        let expiryDate = null;
+        if (expiryDays && expiryDays > 0) {
+            expiryDate = new Date();
+            expiryDate.setDate(expiryDate.getDate() + parseInt(expiryDays));
+            expiryDate = expiryDate.toISOString();
+        }
+        
+        licensesData.licenses[licenseKey] = {
+            owner: owner || 'Unknown',
+            active: true,
+            createdAt: new Date().toISOString(),
+            expiryDate: expiryDate,
+            universeId: null,
+            placeId: null,
+            firstActivation: null,
+            lastVerified: null,
+            verificationCount: 0,
+            notes: notes || ''
+        };
+        
+        writeLicenses(licensesData);
+        console.log(`✅ License created: ${licenseKey}`);
+        
+        res.json({ success: true, licenseKey, message: 'License created' });
+    } catch (error) {
+        res.status(401).json({ success: false });
+    }
+});
+
+app.post('/api/admin/licenses/toggle', (req, res) => {
+    const { token, licenseKey } = req.body;
+    
+    if (!token) return res.status(401).json({ success: false });
+    
+    try {
+        const decoded = Buffer.from(token, 'base64').toString('utf-8');
+        const [username, password] = decoded.split(':');
+        
+        if (!authenticateAdmin(username, password)) {
+            return res.status(401).json({ success: false });
+        }
+        
+        const licensesData = readLicenses();
+        
+        if (!licensesData.licenses[licenseKey]) {
+            return res.json({ success: false, error: 'License not found' });
+        }
+        
+        licensesData.licenses[licenseKey].active = !licensesData.licenses[licenseKey].active;
+        writeLicenses(licensesData);
+        
+        const status = licensesData.licenses[licenseKey].active ? 'enabled' : 'disabled';
+        console.log(`🔄 License ${licenseKey} ${status}`);
+        
+        res.json({ success: true, active: licensesData.licenses[licenseKey].active, message: `License ${status}` });
+    } catch (error) {
+        res.status(401).json({ success: false });
+    }
+});
+
+app.post('/api/admin/licenses/delete', (req, res) => {
+    const { token, licenseKey } = req.body;
+    
+    if (!token) return res.status(401).json({ success: false });
+    
+    try {
+        const decoded = Buffer.from(token, 'base64').toString('utf-8');
+        const [username, password] = decoded.split(':');
+        
+        if (!authenticateAdmin(username, password)) {
+            return res.status(401).json({ success: false });
+        }
+        
+        const licensesData = readLicenses();
+        
+        if (!licensesData.licenses[licenseKey]) {
+            return res.json({ success: false, error: 'License not found' });
+        }
+        
+        delete licensesData.licenses[licenseKey];
+        writeLicenses(licensesData);
+        
+        console.log(`🗑️ License deleted: ${licenseKey}`);
+        res.json({ success: true, message: 'License deleted' });
+    } catch (error) {
+        res.status(401).json({ success: false });
+    }
+});
+
+app.post('/api/admin/version/update', (req, res) => {
+    const { token, version, forceUpdate, updateMessage } = req.body;
+    
+    if (!token) return res.status(401).json({ success: false });
+    
+    try {
+        const decoded = Buffer.from(token, 'base64').toString('utf-8');
+        const [username, password] = decoded.split(':');
+        
+        if (!authenticateAdmin(username, password)) {
+            return res.status(401).json({ success: false });
+        }
+        
+        const licensesData = readLicenses();
+        licensesData.scriptVersion = version;
+        licensesData.forceUpdate = forceUpdate || false;
+        licensesData.updateMessage = updateMessage || 'New update available';
+        writeLicenses(licensesData);
+        
+        console.log(`📦 Version updated: ${version}`);
+        res.json({ success: true, message: 'Version updated' });
+    } catch (error) {
+        res.status(401).json({ success: false });
+    }
+});
+
+app.post('/api/admin/licenses/reset-hwid', (req, res) => {
+    const { token, licenseKey } = req.body;
+    
+    if (!token) return res.status(401).json({ success: false });
+    
+    try {
+        const decoded = Buffer.from(token, 'base64').toString('utf-8');
+        const [username, password] = decoded.split(':');
+        
+        if (!authenticateAdmin(username, password)) {
+            return res.status(401).json({ success: false });
+        }
+        
+        const licensesData = readLicenses();
+        
+        if (!licensesData.licenses[licenseKey]) {
+            return res.json({ success: false, error: 'License not found' });
+        }
+        
+        licensesData.licenses[licenseKey].universeId = null;
+        licensesData.licenses[licenseKey].placeId = null;
+        licensesData.licenses[licenseKey].firstActivation = null;
+        writeLicenses(licensesData);
+        
+        console.log(`🔓 HWID reset: ${licenseKey}`);
+        res.json({ success: true, message: 'HWID reset' });
+    } catch (error) {
+        res.status(401).json({ success: false });
+    }
+});
+
+// HOMEPAGE
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+// DASHBOARD
 app.get('/dashboard', (req, res) => {
     const password = req.query.password;
-    const game = authenticateGame(password);
-    
-    if (!game) {
+    if (!authenticateGame(password)) {
         return res.redirect('/');
     }
-    
-    // Serve the new multi-feature dashboard HTML
-    res.sendFile(path.join(__dirname, 'dashboard-multi-feature.html'));
+    res.sendFile(path.join(__dirname, 'dashboard.html'));
+});
+
+// ADMIN DASHBOARD
+app.get('/admin/dashboard', (req, res) => {
+    res.sendFile(path.join(__dirname, 'admin.html'));
 });
 
 // 404
@@ -799,11 +660,8 @@ app.use((req, res) => {
     res.status(404).json({ error: 'Not found' });
 });
 
-// Start
 app.listen(port, () => {
     console.log(`✅ Server running on port ${port}`);
-    console.log(`🎮 Configured games: ${GAMES.map(g => g.name).join(', ')}`);
+    console.log(`🎮 Games: ${GAMES.map(g => g.name).join(', ')}`);
     console.log(`🔐 License system: ACTIVE`);
-    const db = readDB();
-    console.log(`👑 Admin username: ${db.admin.username}`);
 });
