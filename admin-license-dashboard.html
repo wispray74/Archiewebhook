@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>License Management - Admin Dashboard</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background: #0a0e27;
+            color: #ffffff;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container { max-width: 1400px; margin: 0 auto; }
+        .header {
+            background: linear-gradient(135deg, rgba(139, 92, 246, 0.2), rgba(59, 130, 246, 0.2));
+            border: 1px solid rgba(139, 92, 246, 0.3);
+            border-radius: 20px;
+            padding: 32px;
+            margin-bottom: 32px;
+            backdrop-filter: blur(10px);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+        .header-left h1 {
+            font-size: 32px;
+            margin-bottom: 8px;
+            background: linear-gradient(135deg, #8b5cf6, #3b82f6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .header-left p { color: #94a3b8; font-size: 14px; }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 32px;
+        }
+        .stat-card {
+            background: rgba(15, 23, 42, 0.8);
+            border: 1px solid rgba(139, 92, 246, 0.2);
+            border-radius: 16px;
+            padding: 24px;
+            backdrop-filter: blur(10px);
+        }
+        .stat-card h3 {
+            color: #94a3b8;
+            font-size: 14px;
+            margin-bottom: 12px;
+            font-weight: 500;
+        }
+        .stat-card .value {
+            font-size: 36px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #8b5cf6, #3b82f6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .card {
+            background: rgba(15, 23, 42, 0.8);
+            border: 1px solid rgba(139, 92, 246, 0.2);
+            border-radius: 16px;
+            padding: 28px;
+            margin-bottom: 24px;
+            backdrop-filter: blur(10px);
+        }
+        .card h2 {
+            color: #8b5cf6;
+            font-size: 24px;
+            margin-bottom: 24px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            justify-content: space-between;
+        }
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: linear-gradient(135deg, #8b5cf6, #3b82f6);
+            color: white;
+        }
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(139, 92, 246, 0.4);
+        }
+        .btn-success {
+            background: linear-gradient(135deg, #10b981, #059669);
+        }
+        .btn-danger {
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+        }
+        .btn-secondary {
+            background: rgba(139, 92, 246, 0.2);
+            border: 1px solid rgba(139, 92, 246, 0.4);
+        }
+        .btn-small {
+            padding: 6px 12px;
+            font-size: 12px;
+        }
+        .table-container {
+            overflow-x: auto;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        thead {
+            background: rgba(139, 92, 246, 0.1);
+        }
+        th, td {
+            padding: 16px;
+            text-align: left;
+            border-bottom: 1px solid rgba(139, 92, 246, 0.1);
+        }
+        th {
+            color: #8b5cf6;
+            font-weight: 600;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        td {
+            color: #cbd5e1;
+            font-size: 14px;
+        }
+        tbody tr {
+            transition: background 0.2s;
+        }
+        tbody tr:hover {
+            background: rgba(139, 92, 246, 0.05);
+        }
+        .badge {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .badge-success {
+            background: rgba(16, 185, 129, 0.2);
+            color: #10b981;
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+        .badge-danger {
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+        .badge-warning {
+            background: rgba(245, 158, 11, 0.2);
+            color: #f59e0b;
+            border: 1px solid rgba(245, 158, 11, 0.3);
+        }
+        .badge-info {
+            background: rgba(59, 130, 246, 0.2);
+            color: #3b82f6;
+            border: 1px solid rgba(59, 130, 246, 0.3);
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(5px);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        .modal.active {
+            display: flex;
+        }
+        .modal-content {
+            background: rgba(15, 23, 42, 0.95);
+            border: 1px solid rgba(139, 92, 246, 0.3);
+            border-radius: 20px;
+            padding: 32px;
+            max-width: 500px;
+            width: 100%;
+            animation: modalFadeIn 0.3s ease-out;
+        }
+        @keyframes modalFadeIn {
+            from { opacity: 0; transform: scale(0.9); }
+            to { opacity: 1; transform: scale(1); }
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+        }
+        .modal-header h2 {
+            color: #8b5cf6;
+            font-size: 24px;
+        }
+        .close-btn {
+            background: none;
+            border: none;
+            color: #94a3b8;
+            font-size: 24px;
+            cursor: pointer;
+            padding: 0;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 8px;
+            transition: all 0.3s;
+        }
+        .close-btn:hover {
+            background: rgba(139, 92, 246, 0.2);
+            color: #8b5cf6;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        .form-group label {
+            display: block;
+            color: #cbd5e1;
+            font-size: 14px;
+            font-weight: 500;
+            margin-bottom: 8px;
+        }
+        .form-group input, .form-group textarea {
+            width: 100%;
+            padding: 12px 16px;
+            background: rgba(15, 23, 42, 0.6);
+            border: 2px solid rgba(139, 92, 246, 0.2);
+            border-radius: 10px;
+            color: #ffffff;
+            font-size: 15px;
+            transition: all 0.3s;
+            outline: none;
+            font-family: inherit;
+        }
+        .form-group input:focus, .form-group textarea:focus {
+            border-color: #8b5cf6;
+            background: rgba(15, 23, 42, 0.9);
+        }
+        .modal-footer {
+            display: flex;
+            gap: 12px;
+            justify-content: flex-end;
+            margin-top: 24px;
+        }
+        .success-toast, .error-toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 16px 24px;
+            border-radius: 12px;
+            font-weight: 600;
+            display: none;
+            animation: slideIn 0.3s ease-out;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            z-index: 1001;
+        }
+        .success-toast {
+            background: rgba(16, 185, 129, 0.9);
+            color: white;
+        }
+        .error-toast {
+            background: rgba(239, 68, 68, 0.9);
+            color: white;
+        }
+        @keyframes slideIn {
+            from { transform: translateX(400px); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        .code-box {
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid rgba(139, 92, 246, 0.2);
+            border-radius: 10px;
+            padding: 16px;
+            margin-top: 12px;
+            position: relative;
+        }
+        .code-box code {
+            color: #10b981;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            word-break: break-all;
+            line-height: 1.6;
+        }
+        .copy-btn {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            padding: 4px 8px;
+            font-size: 11px;
+        }
+        .loading {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .actions-cell {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+    </style>
+</head>
+<body>
+    <div class="success-toast" id="successToast"></div>
+    <div class="error-toast" id="errorToast"></div>
+    
+    <!-- Create License Modal -->
+    <div class="modal" id="createLicenseModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>🔐 Create New License</h2>
+                <button class="close-btn" onclick="closeModal('createLicenseModal')">&times;</button>
+            </div>
+            <form id="createLicenseForm">
+                <div class="form-group">
+                    <label>Owner Name / Email *</label>
+                    <input type="text" id="ownerName" required placeholder="e.g., customer@email.com">
+                </div>
+                <div class="form-group">
+                    <label>Expiry (Days) - Leave 0 for lifetime</label>
+                    <input type="number" id="expiryDays" value="0" min="0" placeholder="0 = Lifetime">
+                </div>
+                <div class="form-group">
+                    <label>Notes (Optional)</label>
+                    <textarea id="licenseNotes" rows="3" placeholder="Add any notes about this license..."></textarea>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('createLicenseModal')">Cancel</button>
+                    <button type="submit" class="btn btn-success">Create License</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Update Version Modal -->
+    <div class="modal" id="updateVersionModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>📦 Update Script Version</h2>
+                <button class="close-btn" onclick="closeModal('updateVersionModal')">&times;</button>
+            </div>
+            <form id="updateVersionForm">
+                <div class="form-group">
+                    <label>New Version *</label>
+                    <input type="text" id="newVersion" required placeholder="e.g., 1.1.0">
+                </div>
+                <div class="form-group">
+                    <label>Update Message</label>
+                    <input type="text" id="updateMessage" placeholder="e.g., Bug fixes and improvements">
+                </div>
+                <div class="form-group">
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" id="forceUpdate" style="width: auto;">
+                        Force Update (Script will stop if not updated)
+                    </label>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('updateVersionModal')">Cancel</button>
+                    <button type="submit" class="btn">Update Version</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- View License Modal -->
+    <div class="modal" id="viewLicenseModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>🔍 License Details</h2>
+                <button class="close-btn" onclick="closeModal('viewLicenseModal')">&times;</button>
+            </div>
+            <div id="licenseDetailsContent"></div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeModal('viewLicenseModal')">Close</button>
+            </div>
+        </div>
+    </div>
+    
+    <div class="container">
+        <div class="header">
+            <div class="header-left">
+                <h1>🔐 License Management System</h1>
+                <p>Admin Dashboard - Script Anti-Resell Protection</p>
+            </div>
+            <button class="btn" onclick="window.location.href='/'">🚪 Logout</button>
+        </div>
+        
+        <div class="stats">
+            <div class="stat-card">
+                <h3>Total Licenses</h3>
+                <div class="value" id="totalLicenses">0</div>
+            </div>
+            <div class="stat-card">
+                <h3>Active Licenses</h3>
+                <div class="value" id="activeLicenses">0</div>
+            </div>
+            <div class="stat-card">
+                <h3>Locked Licenses</h3>
+                <div class="value" id="lockedLicenses">0</div>
+            </div>
+            <div class="stat-card">
+                <h3>Current Version</h3>
+                <div class="value" id="currentVersion" style="font-size: 24px;">1.0.0</div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h2>
+                <span>🎫 License Keys</span>
+                <div style="display: flex; gap: 12px;">
+                    <button class="btn btn-success" onclick="openModal('createLicenseModal')">➕ Create License</button>
+                    <button class="btn" onclick="openModal('updateVersionModal')">📦 Update Version</button>
+                    <button class="btn btn-secondary" onclick="loadLicenses()">🔄 Refresh</button>
+                </div>
+            </h2>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>License Key</th>
+                            <th>Owner</th>
+                            <th>Status</th>
+                            <th>Universe ID</th>
+                            <th>Created</th>
+                            <th>Last Verified</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="licensesTableBody">
+                        <tr>
+                            <td colspan="7" style="text-align: center; padding: 40px;">
+                                <div class="loading"></div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        const token = urlParams.get('token');
+        
+        if (!token) {
+            window.location.href = '/';
+        }
+        
+        function openModal(modalId) {
+            document.getElementById(modalId).classList.add('active');
+        }
+        
+        function closeModal(modalId) {
+            document.getElementById(modalId).classList.remove('active');
+        }
+        
+        function showToast(message, type = 'success') {
+            const toastId = type === 'success' ? 'successToast' : 'errorToast';
+            const toast = document.getElementById(toastId);
+            toast.textContent = message;
+            toast.style.display = 'block';
+            setTimeout(() => {
+                toast.style.display = 'none';
+            }, 3000);
+        }
+        
+        async function loadLicenses() {
+            try {
+                const response = await fetch('/api/admin/licenses?token=' + encodeURIComponent(token));
+                const data = await response.json();
+                
+                if (data.success) {
+                    const licenses = data.licenses;
+                    
+                    // Update stats
+                    document.getElementById('totalLicenses').textContent = licenses.length;
+                    document.getElementById('activeLicenses').textContent = licenses.filter(l => l.active).length;
+                    document.getElementById('lockedLicenses').textContent = licenses.filter(l => l.universeId).length;
+                    document.getElementById('currentVersion').textContent = data.scriptVersion;
+                    
+                    // Update table
+                    const tbody = document.getElementById('licensesTableBody');
+                    tbody.innerHTML = '';
+                    
+                    if (licenses.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 40px; color: #64748b;">No licenses created yet</td></tr>';
+                        return;
+                    }
+                    
+                    licenses.forEach(license => {
+                        const tr = document.createElement('tr');
+                        
+                        const statusBadge = license.active 
+                            ? '<span class="badge badge-success">✓ Active</span>'
+                            : '<span class="badge badge-danger">✗ Disabled</span>';
+                        
+                        const hwidBadge = license.universeId
+                            ? `<span class="badge badge-info">🔒 ${license.universeId}</span>`
+                            : '<span class="badge badge-warning">⚠ Not Locked</span>';
+                        
+                        const createdDate = new Date(license.createdAt).toLocaleDateString();
+                        const lastVerified = license.lastVerified 
+                            ? new Date(license.lastVerified).toLocaleString()
+                            : 'Never';
+                        
+                        tr.innerHTML = `
+                            <td><code style="color: #10b981; font-size: 12px;">${license.licenseKey}</code></td>
+                            <td><strong>${license.owner}</strong></td>
+                            <td>${statusBadge}</td>
+                            <td>${hwidBadge}</td>
+                            <td style="font-size: 12px;">${createdDate}</td>
+                            <td style="font-size: 12px;">${lastVerified}</td>
+                            <td>
+                                <div class="actions-cell">
+                                    <button class="btn btn-small btn-secondary" onclick="viewLicense('${license.licenseKey}')">
+                                        👁️ View
+                                    </button>
+                                    <button class="btn btn-small ${license.active ? 'btn-danger' : 'btn-success'}" 
+                                            onclick="toggleLicense('${license.licenseKey}')">
+                                        ${license.active ? '🚫 Disable' : '✅ Enable'}
+                                    </button>
+                                    ${license.universeId ? `
+                                        <button class="btn btn-small btn-secondary" onclick="resetHWID('${license.licenseKey}')">
+                                            🔓 Reset HWID
+                                        </button>
+                                    ` : ''}
+                                    <button class="btn btn-small btn-danger" onclick="deleteLicense('${license.licenseKey}')">
+                                        🗑️ Delete
+                                    </button>
+                                </div>
+                            </td>
+                        `;
+                        tbody.appendChild(tr);
+                    });
+                }
+            } catch (error) {
+                console.error('Error loading licenses:', error);
+                showToast('Failed to load licenses', 'error');
+            }
+        }
+        
+        async function viewLicense(licenseKey) {
+            try {
+                const response = await fetch('/api/admin/licenses?token=' + encodeURIComponent(token));
+                const data = await response.json();
+                
+                if (data.success) {
+                    const license = data.licenses.find(l => l.licenseKey === licenseKey);
+                    
+                    if (license) {
+                        const content = `
+                            <div class="form-group">
+                                <label>License Key</label>
+                                <div class="code-box">
+                                    <code>${license.licenseKey}</code>
+                                    <button class="btn btn-small copy-btn" onclick="copyToClipboard('${license.licenseKey}')">📋 Copy</button>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label>Owner</label>
+                                <p style="color: #cbd5e1;">${license.owner}</p>
+                            </div>
+                            <div class="form-group">
+                                <label>Status</label>
+                                <p>${license.active ? '<span class="badge badge-success">✓ Active</span>' : '<span class="badge badge-danger">✗ Disabled</span>'}</p>
+                            </div>
+                            <div class="form-group">
+                                <label>Universe ID (HWID)</label>
+                                <p>${license.universeId ? `<code style="color: #10b981;">${license.universeId}</code>` : '<span style="color: #94a3b8;">Not locked yet</span>'}</p>
+                            </div>
+                            <div class="form-group">
+                                <label>Place ID</label>
+                                <p>${license.placeId ? `<code style="color: #10b981;">${license.placeId}</code>` : '<span style="color: #94a3b8;">N/A</span>'}</p>
+                            </div>
+                            <div class="form-group">
+                                <label>Expiry Date</label>
+                                <p>${license.expiryDate ? new Date(license.expiryDate).toLocaleString() : '<span class="badge badge-success">Lifetime</span>'}</p>
+                            </div>
+                            <div class="form-group">
+                                <label>Created At</label>
+                                <p style="color: #cbd5e1;">${new Date(license.createdAt).toLocaleString()}</p>
+                            </div>
+                            <div class="form-group">
+                                <label>First Activation</label>
+                                <p style="color: #cbd5e1;">${license.firstActivation ? new Date(license.firstActivation).toLocaleString() : 'Not activated yet'}</p>
+                            </div>
+                            <div class="form-group">
+                                <label>Last Verified</label>
+                                <p style="color: #cbd5e1;">${license.lastVerified ? new Date(license.lastVerified).toLocaleString() : 'Never'}</p>
+                            </div>
+                            <div class="form-group">
+                                <label>Verification Count</label>
+                                <p style="color: #cbd5e1;">${license.verificationCount || 0} times</p>
+                            </div>
+                            ${license.notes ? `
+                                <div class="form-group">
+                                    <label>Notes</label>
+                                    <p style="color: #cbd5e1;">${license.notes}</p>
+                                </div>
+                            ` : ''}
+                        `;
+                        
+                        document.getElementById('licenseDetailsContent').innerHTML = content;
+                        openModal('viewLicenseModal');
+                    }
+                }
+            } catch (error) {
+                showToast('Failed to load license details', 'error');
+            }
+        }
+        
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                showToast('License key copied!', 'success');
+            }).catch(() => {
+                const tempInput = document.createElement('input');
+                tempInput.value = text;
+                document.body.appendChild(tempInput);
+                tempInput.select();
+                document.execCommand('copy');
+                document.body.removeChild(tempInput);
+                showToast('License key copied!', 'success');
+            });
+        }
+        
+        document.getElementById('createLicenseForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const owner = document.getElementById('ownerName').value;
+            const expiryDays = parseInt(document.getElementById('expiryDays').value);
+            const notes = document.getElementById('licenseNotes').value;
+            
+            try {
+                const response = await fetch('/api/admin/licenses/create', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        token: token,
+                        owner: owner,
+                        expiryDays: expiryDays > 0 ? expiryDays : null,
+                        notes: notes
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showToast('License created: ' + data.licenseKey, 'success');
+                    closeModal('createLicenseModal');
+                    document.getElementById('createLicenseForm').reset();
+                    loadLicenses();
+                } else {
+                    showToast(data.error || 'Failed to create license', 'error');
+                }
+            } catch (error) {
+                showToast('Connection error', 'error');
+            }
+        });
+        
+        async function toggleLicense(licenseKey) {
+            if (!confirm('Are you sure you want to toggle this license?')) return;
+            
+            try {
+                const response = await fetch('/api/admin/licenses/toggle', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        token: token,
+                        licenseKey: licenseKey
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showToast(data.message, 'success');
+                    loadLicenses();
+                } else {
+                    showToast(data.error || 'Failed to toggle license', 'error');
+                }
+            } catch (error) {
+                showToast('Connection error', 'error');
+            }
+        }
+        
+        async function deleteLicense(licenseKey) {
+            if (!confirm('Are you sure you want to DELETE this license? This action cannot be undone!')) return;
+            
+            try {
+                const response = await fetch('/api/admin/licenses/delete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        token: token,
+                        licenseKey: licenseKey
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showToast(data.message, 'success');
+                    loadLicenses();
+                } else {
+                    showToast(data.error || 'Failed to delete license', 'error');
+                }
+            } catch (error) {
+                showToast('Connection error', 'error');
+            }
+        }
+        
+        async function resetHWID(licenseKey) {
+            if (!confirm('Reset HWID for this license? The license can be used in another game after reset.')) return;
+            
+            try {
+                const response = await fetch('/api/admin/licenses/reset-hwid', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        token: token,
+                        licenseKey: licenseKey
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showToast(data.message, 'success');
+                    loadLicenses();
+                } else {
+                    showToast(data.error || 'Failed to reset HWID', 'error');
+                }
+            } catch (error) {
+                showToast('Connection error', 'error');
+            }
+        }
+        
+        document.getElementById('updateVersionForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const version = document.getElementById('newVersion').value;
+            const updateMessage = document.getElementById('updateMessage').value;
+            const forceUpdate = document.getElementById('forceUpdate').checked;
+            
+            try {
+                const response = await fetch('/api/admin/version/update', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        token: token,
+                        version: version,
+                        forceUpdate: forceUpdate,
+                        updateMessage: updateMessage || 'New update available'
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showToast('Version updated successfully!', 'success');
+                    closeModal('updateVersionModal');
+                    document.getElementById('updateVersionForm').reset();
+                    loadLicenses();
+                } else {
+                    showToast(data.error || 'Failed to update version', 'error');
+                }
+            } catch (error) {
+                showToast('Connection error', 'error');
+            }
+        });
+        
+        // Close modal on outside click
+        document.querySelectorAll('.modal').forEach(modal => {
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) {
+                    modal.classList.remove('active');
+                }
+            });
+        });
+        
+        // Load licenses on page load
+        loadLicenses();
+        
+        // Auto refresh every 30 seconds
+        setInterval(loadLicenses, 30000);
+    </script>
+</body>
+</html>
