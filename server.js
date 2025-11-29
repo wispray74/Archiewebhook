@@ -2,7 +2,6 @@ const express = require('express');
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
-const crypto = require('crypto');
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -14,9 +13,8 @@ app.use(express.json({ verify: (req, res, buf, encoding) => {
 }}));
 app.use(express.urlencoded({ extended: true }));
 
-// 📁 Database file paths
+// 📁 Database file path
 const DB_FILE = path.join(__dirname, 'users.json');
-const LICENSE_FILE = path.join(__dirname, 'licenses.json');
 
 // 🔧 Database helper functions
 function readDB() {
@@ -47,43 +45,6 @@ function writeDB(data) {
         console.error('❌ Error writing database:', error);
         return false;
     }
-}
-
-// 🔐 License System Functions
-function readLicenses() {
-    try {
-        if (!fs.existsSync(LICENSE_FILE)) {
-            const initialData = {
-                licenses: {},
-                scriptVersion: "1.0.0",
-                forceUpdate: false
-            };
-            fs.writeFileSync(LICENSE_FILE, JSON.stringify(initialData, null, 2));
-            return initialData;
-        }
-        return JSON.parse(fs.readFileSync(LICENSE_FILE, 'utf8'));
-    } catch (error) {
-        console.error('❌ Error reading licenses:', error);
-        return { licenses: {}, scriptVersion: "1.0.0", forceUpdate: false };
-    }
-}
-
-function writeLicenses(data) {
-    try {
-        fs.writeFileSync(LICENSE_FILE, JSON.stringify(data, null, 2));
-        return true;
-    } catch (error) {
-        console.error('❌ Error writing licenses:', error);
-        return false;
-    }
-}
-
-function generateLicenseKey() {
-    const prefix = 'MUSIC';
-    const random1 = crypto.randomBytes(4).toString('hex').toUpperCase();
-    const random2 = crypto.randomBytes(4).toString('hex').toUpperCase();
-    const random3 = crypto.randomBytes(4).toString('hex').toUpperCase();
-    return `${prefix}-${random1}-${random2}-${random3}`;
 }
 
 // 🎮 Initialize games from environment variables and database
@@ -167,7 +128,6 @@ if (GAMES.length === 0) {
 }
 
 console.log('🎮 Archie Webhook - ' + GAMES.length + ' games configured');
-console.log('🔐 License system: ACTIVE');
 
 // 🔐 Auth Helpers
 function authenticateGame(password) {
@@ -238,337 +198,7 @@ async function sendToRoblox(game, donationData) {
     }
 }
 
-// ============================================
-// 🔐 LICENSE SYSTEM ENDPOINTS (NEW)
-// ============================================
-
-// Verify License (Called from Roblox)
-app.post('/api/license/verify', (req, res) => {
-    const { licenseKey, universeId, placeId } = req.body;
-    
-    if (!licenseKey || !universeId) {
-        return res.status(400).json({ 
-            valid: false, 
-            error: 'Missing parameters',
-            forceStop: true 
-        });
-    }
-    
-    const licensesData = readLicenses();
-    const license = licensesData.licenses[licenseKey];
-    
-    if (!license) {
-        console.log(`❌ Invalid license: ${licenseKey} from Universe ${universeId}`);
-        return res.status(401).json({ 
-            valid: false, 
-            error: 'Invalid license key',
-            forceStop: true 
-        });
-    }
-    
-    if (!license.active) {
-        console.log(`⚠️ Disabled license: ${licenseKey}`);
-        return res.status(401).json({ 
-            valid: false, 
-            error: 'License has been disabled',
-            forceStop: true 
-        });
-    }
-    
-    if (license.expiryDate) {
-        const expiryDate = new Date(license.expiryDate);
-        if (expiryDate < new Date()) {
-            console.log(`⏰ Expired license: ${licenseKey}`);
-            return res.status(401).json({ 
-                valid: false, 
-                error: 'License has expired',
-                forceStop: true 
-            });
-        }
-    }
-    
-    // HWID Lock
-    if (!license.universeId) {
-        license.universeId = universeId;
-        license.firstActivation = new Date().toISOString();
-        writeLicenses(licensesData);
-        console.log(`🔒 License ${licenseKey} locked to Universe ${universeId}`);
-    }
-    
-    if (license.universeId !== universeId) {
-        console.log(`🚫 HWID mismatch: ${licenseKey} | Expected: ${license.universeId} | Got: ${universeId}`);
-        return res.status(401).json({ 
-            valid: false, 
-            error: 'License already used in another game',
-            forceStop: true 
-        });
-    }
-    
-    license.lastVerified = new Date().toISOString();
-    license.verificationCount = (license.verificationCount || 0) + 1;
-    if (placeId) {
-        license.placeId = placeId;
-    }
-    writeLicenses(licensesData);
-    
-    res.json({ 
-        valid: true,
-        owner: license.owner,
-        expiryDate: license.expiryDate || null,
-        scriptVersion: licensesData.scriptVersion,
-        forceUpdate: licensesData.forceUpdate || false,
-        message: 'License verified successfully'
-    });
-});
-
-// Check for updates
-app.get('/api/script/version', (req, res) => {
-    const licensesData = readLicenses();
-    res.json({
-        version: licensesData.scriptVersion,
-        forceUpdate: licensesData.forceUpdate || false,
-        updateMessage: licensesData.updateMessage || 'New update available'
-    });
-});
-
-// ============================================
-// 🔐 ADMIN LICENSE MANAGEMENT (NEW)
-// ============================================
-
-// Get all licenses
-app.get('/api/admin/licenses', (req, res) => {
-    const token = req.query.token;
-    if (!token) {
-        return res.status(401).json({ success: false, error: 'Unauthorized' });
-    }
-    
-    try {
-        const decoded = Buffer.from(token, 'base64').toString('utf-8');
-        const [username, password] = decoded.split(':');
-        
-        if (!authenticateAdmin(username, password)) {
-            return res.status(401).json({ success: false, error: 'Unauthorized' });
-        }
-        
-        const licensesData = readLicenses();
-        const licenses = Object.entries(licensesData.licenses).map(([key, data]) => ({
-            licenseKey: key,
-            ...data
-        }));
-        
-        res.json({ 
-            success: true, 
-            licenses,
-            scriptVersion: licensesData.scriptVersion,
-            forceUpdate: licensesData.forceUpdate
-        });
-    } catch (error) {
-        res.status(401).json({ success: false, error: 'Invalid token' });
-    }
-});
-
-// Create new license
-app.post('/api/admin/licenses/create', (req, res) => {
-    const { token, owner, expiryDays, notes } = req.body;
-    
-    if (!token) {
-        return res.status(401).json({ success: false, error: 'Unauthorized' });
-    }
-    
-    try {
-        const decoded = Buffer.from(token, 'base64').toString('utf-8');
-        const [username, password] = decoded.split(':');
-        
-        if (!authenticateAdmin(username, password)) {
-            return res.status(401).json({ success: false, error: 'Unauthorized' });
-        }
-        
-        const licenseKey = generateLicenseKey();
-        const licensesData = readLicenses();
-        
-        let expiryDate = null;
-        if (expiryDays && expiryDays > 0) {
-            expiryDate = new Date();
-            expiryDate.setDate(expiryDate.getDate() + parseInt(expiryDays));
-            expiryDate = expiryDate.toISOString();
-        }
-        
-        licensesData.licenses[licenseKey] = {
-            owner: owner || 'Unknown',
-            active: true,
-            createdAt: new Date().toISOString(),
-            expiryDate: expiryDate,
-            universeId: null,
-            placeId: null,
-            firstActivation: null,
-            lastVerified: null,
-            verificationCount: 0,
-            notes: notes || ''
-        };
-        
-        writeLicenses(licensesData);
-        
-        console.log(`✅ New license created: ${licenseKey} for ${owner}`);
-        
-        res.json({ 
-            success: true, 
-            licenseKey,
-            message: 'License created successfully'
-        });
-    } catch (error) {
-        res.status(401).json({ success: false, error: 'Invalid token' });
-    }
-});
-
-// Toggle license active status
-app.post('/api/admin/licenses/toggle', (req, res) => {
-    const { token, licenseKey } = req.body;
-    
-    if (!token) {
-        return res.status(401).json({ success: false, error: 'Unauthorized' });
-    }
-    
-    try {
-        const decoded = Buffer.from(token, 'base64').toString('utf-8');
-        const [username, password] = decoded.split(':');
-        
-        if (!authenticateAdmin(username, password)) {
-            return res.status(401).json({ success: false, error: 'Unauthorized' });
-        }
-        
-        const licensesData = readLicenses();
-        
-        if (!licensesData.licenses[licenseKey]) {
-            return res.json({ success: false, error: 'License not found' });
-        }
-        
-        licensesData.licenses[licenseKey].active = !licensesData.licenses[licenseKey].active;
-        writeLicenses(licensesData);
-        
-        const status = licensesData.licenses[licenseKey].active ? 'enabled' : 'disabled';
-        console.log(`🔄 License ${licenseKey} ${status}`);
-        
-        res.json({ 
-            success: true,
-            active: licensesData.licenses[licenseKey].active,
-            message: `License ${status} successfully`
-        });
-    } catch (error) {
-        res.status(401).json({ success: false, error: 'Invalid token' });
-    }
-});
-
-// Delete license
-app.post('/api/admin/licenses/delete', (req, res) => {
-    const { token, licenseKey } = req.body;
-    
-    if (!token) {
-        return res.status(401).json({ success: false, error: 'Unauthorized' });
-    }
-    
-    try {
-        const decoded = Buffer.from(token, 'base64').toString('utf-8');
-        const [username, password] = decoded.split(':');
-        
-        if (!authenticateAdmin(username, password)) {
-            return res.status(401).json({ success: false, error: 'Unauthorized' });
-        }
-        
-        const licensesData = readLicenses();
-        
-        if (!licensesData.licenses[licenseKey]) {
-            return res.json({ success: false, error: 'License not found' });
-        }
-        
-        delete licensesData.licenses[licenseKey];
-        writeLicenses(licensesData);
-        
-        console.log(`🗑️ License deleted: ${licenseKey}`);
-        
-        res.json({ 
-            success: true,
-            message: 'License deleted successfully'
-        });
-    } catch (error) {
-        res.status(401).json({ success: false, error: 'Invalid token' });
-    }
-});
-
-// Update script version
-app.post('/api/admin/version/update', (req, res) => {
-    const { token, version, forceUpdate, updateMessage } = req.body;
-    
-    if (!token) {
-        return res.status(401).json({ success: false, error: 'Unauthorized' });
-    }
-    
-    try {
-        const decoded = Buffer.from(token, 'base64').toString('utf-8');
-        const [username, password] = decoded.split(':');
-        
-        if (!authenticateAdmin(username, password)) {
-            return res.status(401).json({ success: false, error: 'Unauthorized' });
-        }
-        
-        const licensesData = readLicenses();
-        licensesData.scriptVersion = version;
-        licensesData.forceUpdate = forceUpdate || false;
-        licensesData.updateMessage = updateMessage || 'New update available';
-        writeLicenses(licensesData);
-        
-        console.log(`📦 Script version updated to ${version}`);
-        
-        res.json({ 
-            success: true,
-            message: 'Version updated successfully'
-        });
-    } catch (error) {
-        res.status(401).json({ success: false, error: 'Invalid token' });
-    }
-});
-
-// Reset HWID for license
-app.post('/api/admin/licenses/reset-hwid', (req, res) => {
-    const { token, licenseKey } = req.body;
-    
-    if (!token) {
-        return res.status(401).json({ success: false, error: 'Unauthorized' });
-    }
-    
-    try {
-        const decoded = Buffer.from(token, 'base64').toString('utf-8');
-        const [username, password] = decoded.split(':');
-        
-        if (!authenticateAdmin(username, password)) {
-            return res.status(401).json({ success: false, error: 'Unauthorized' });
-        }
-        
-        const licensesData = readLicenses();
-        
-        if (!licensesData.licenses[licenseKey]) {
-            return res.json({ success: false, error: 'License not found' });
-        }
-        
-        licensesData.licenses[licenseKey].universeId = null;
-        licensesData.licenses[licenseKey].placeId = null;
-        licensesData.licenses[licenseKey].firstActivation = null;
-        writeLicenses(licensesData);
-        
-        console.log(`🔓 HWID reset for license: ${licenseKey}`);
-        
-        res.json({ 
-            success: true,
-            message: 'HWID reset successfully'
-        });
-    } catch (error) {
-        res.status(401).json({ success: false, error: 'Invalid token' });
-    }
-});
-
-// ============================================
-// 🔧 ORIGINAL WEBHOOK ROUTES (UNCHANGED)
-// ============================================
-
+// 🔧 Webhook Routes
 GAMES.forEach(game => {
     // Saweria
     app.post(`/${game.webhookSecret}/saweria`, async (req, res) => {
@@ -665,10 +295,7 @@ GAMES.forEach(game => {
     });
 });
 
-// ============================================
-// 🏠 ORIGINAL HOMEPAGE & APIs (UNCHANGED)
-// ============================================
-
+// 🏠 Homepage
 app.get('/', (req, res) => {
     const html = `<!DOCTYPE html>
 <html lang="en">
@@ -685,30 +312,200 @@ app.get('/', (req, res) => {
             display: flex;
             justify-content: center;
             align-items: center;
+            overflow: hidden;
+            position: relative;
         }
-        .container { max-width: 450px; width: 90%; }
+        body::before {
+            content: '';
+            position: absolute;
+            width: 200%;
+            height: 200%;
+            background: 
+                radial-gradient(circle at 20% 50%, rgba(120, 119, 198, 0.3), transparent 50%),
+                radial-gradient(circle at 80% 80%, rgba(88, 166, 255, 0.3), transparent 50%),
+                radial-gradient(circle at 40% 20%, rgba(139, 92, 246, 0.2), transparent 50%);
+            animation: float 20s ease-in-out infinite;
+        }
+        @keyframes float {
+            0%, 100% { transform: translate(0, 0) rotate(0deg); }
+            33% { transform: translate(30px, -50px) rotate(120deg); }
+            66% { transform: translate(-20px, 20px) rotate(240deg); }
+        }
+        .grid-bg {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background-image: 
+                linear-gradient(rgba(139, 92, 246, 0.1) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(139, 92, 246, 0.1) 1px, transparent 1px);
+            background-size: 50px 50px;
+            animation: grid-move 20s linear infinite;
+            opacity: 0.3;
+        }
+        @keyframes grid-move {
+            0% { transform: translate(0, 0); }
+            100% { transform: translate(50px, 50px); }
+        }
+        .container {
+            position: relative;
+            z-index: 10;
+            width: 90%;
+            max-width: 450px;
+        }
         .login-box {
             background: rgba(15, 23, 42, 0.8);
             backdrop-filter: blur(20px);
             border: 1px solid rgba(139, 92, 246, 0.3);
             border-radius: 24px;
             padding: 48px 40px;
+            box-shadow: 
+                0 20px 60px rgba(0, 0, 0, 0.5),
+                0 0 100px rgba(139, 92, 246, 0.1),
+                inset 0 1px 0 rgba(255, 255, 255, 0.1);
+            animation: fadeIn 0.6s ease-out;
         }
-        h1 { color: #8b5cf6; font-size: 28px; text-align: center; margin-bottom: 30px; }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .logo {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+        .logo-icon {
+            width: 80px;
+            height: 80px;
+            background: linear-gradient(135deg, #8b5cf6, #3b82f6);
+            border-radius: 20px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 40px;
+            margin-bottom: 16px;
+            box-shadow: 0 10px 30px rgba(139, 92, 246, 0.4);
+            animation: pulse 2s ease-in-out infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+        h1 {
+            color: #ffffff;
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            text-shadow: 0 2px 10px rgba(139, 92, 246, 0.5);
+        }
+        .subtitle {
+            color: #94a3b8;
+            font-size: 14px;
+            font-weight: 400;
+        }
+        .form-group {
+            margin-bottom: 24px;
+        }
+        label {
+            display: block;
+            color: #cbd5e1;
+            font-size: 14px;
+            font-weight: 500;
+            margin-bottom: 8px;
+            letter-spacing: 0.3px;
+        }
+        .input-wrapper {
+            position: relative;
+        }
+        input {
+            width: 100%;
+            padding: 16px 48px 16px 16px;
+            background: rgba(15, 23, 42, 0.6);
+            border: 2px solid rgba(139, 92, 246, 0.2);
+            border-radius: 12px;
+            color: #ffffff;
+            font-size: 15px;
+            transition: all 0.3s;
+            outline: none;
+        }
+        input:focus {
+            border-color: #8b5cf6;
+            background: rgba(15, 23, 42, 0.9);
+            box-shadow: 0 0 0 4px rgba(139, 92, 246, 0.1);
+        }
+        .input-icon {
+            position: absolute;
+            right: 16px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #64748b;
+            font-size: 20px;
+        }
+        button {
+            width: 100%;
+            padding: 16px;
+            background: linear-gradient(135deg, #8b5cf6, #3b82f6);
+            border: none;
+            border-radius: 12px;
+            color: #ffffff;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 8px 24px rgba(139, 92, 246, 0.4);
+            position: relative;
+            overflow: hidden;
+        }
+        button::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+            transition: left 0.5s;
+        }
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 32px rgba(139, 92, 246, 0.5);
+        }
+        button:hover::before {
+            left: 100%;
+        }
+        button:active {
+            transform: translateY(0);
+        }
+        .error {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: #fca5a5;
+            padding: 12px 16px;
+            border-radius: 8px;
+            font-size: 14px;
+            margin-top: 16px;
+            display: none;
+            animation: shake 0.5s;
+        }
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-10px); }
+            75% { transform: translateX(10px); }
+        }
         .tabs {
             display: flex;
             gap: 12px;
-            margin-bottom: 30px;
+            margin-bottom: 32px;
         }
         .tab {
             flex: 1;
             padding: 12px;
-            background: rgba(139, 92, 246, 0.1);
+            background: rgba(15, 23, 42, 0.5);
             border: 1px solid rgba(139, 92, 246, 0.2);
             border-radius: 12px;
             color: #94a3b8;
+            font-size: 14px;
             font-weight: 600;
             cursor: pointer;
+            transition: all 0.3s;
             text-align: center;
         }
         .tab.active {
@@ -716,78 +513,124 @@ app.get('/', (req, res) => {
             border-color: #8b5cf6;
             color: #8b5cf6;
         }
-        .tab-content { display: none; }
-        .tab-content.active { display: block; }
-        .form-group { margin-bottom: 20px; }
-        label { display: block; color: #cbd5e1; font-size: 14px; margin-bottom: 8px; }
-        input {
-            width: 100%;
-            padding: 12px 16px;
-            background: rgba(15, 23, 42, 0.6);
-            border: 2px solid rgba(139, 92, 246, 0.2);
-            border-radius: 10px;
-            color: #ffffff;
-            font-size: 15px;
-            outline: none;
+        .tab:hover {
+            background: rgba(139, 92, 246, 0.15);
         }
-        input:focus { border-color: #8b5cf6; }
-        button {
-            width: 100%;
-            padding: 14px;
-            background: linear-gradient(135deg, #8b5cf6, #3b82f6);
-            border: none;
-            border-radius: 10px;
-            color: white;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-        }
-        button:hover { transform: translateY(-2px); }
-        .error {
-            background: rgba(239, 68, 68, 0.1);
-            border: 1px solid rgba(239, 68, 68, 0.3);
-            color: #fca5a5;
-            padding: 12px;
-            border-radius: 8px;
-            margin-top: 12px;
+        .tab-content {
             display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .footer {
+            text-align: center;
+            margin-top: 32px;
+            padding-top: 24px;
+            border-top: 1px solid rgba(139, 92, 246, 0.1);
+        }
+        .footer-text {
+            color: #64748b;
+            font-size: 13px;
+            margin-bottom: 12px;
+        }
+        .discord-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            color: #8b5cf6;
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+            padding: 8px 16px;
+            border-radius: 8px;
+            background: rgba(139, 92, 246, 0.1);
+            border: 1px solid rgba(139, 92, 246, 0.2);
+            transition: all 0.3s;
+        }
+        .discord-link:hover {
+            background: rgba(139, 92, 246, 0.2);
+            border-color: rgba(139, 92, 246, 0.4);
+            transform: translateY(-2px);
+        }
+        .loader {
+            display: none;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,0.3);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin: 0 auto;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
         }
     </style>
 </head>
 <body>
+    <div class="grid-bg"></div>
     <div class="container">
         <div class="login-box">
-            <h1>🎮 Archie Webhook</h1>
+            <div class="logo">
+                <div class="logo-icon">🎮</div>
+                <h1>Archie Webhook</h1>
+                <p class="subtitle">Secure Integration Portal</p>
+            </div>
             
             <div class="tabs">
-                <div class="tab active" onclick="switchTab('user')">User</div>
-                <div class="tab" onclick="switchTab('admin')">Admin</div>
+                <div class="tab active" onclick="switchTab('user')">👤 User Login</div>
+                <div class="tab" onclick="switchTab('admin')">🔐 Admin Login</div>
             </div>
             
+            <!-- User Login -->
             <div id="userTab" class="tab-content active">
-                <form id="userForm">
+                <form id="userLoginForm">
                     <div class="form-group">
-                        <label>Password</label>
-                        <input type="password" id="userPassword" required>
+                        <label for="userPassword">Access Password</label>
+                        <div class="input-wrapper">
+                            <input type="password" id="userPassword" placeholder="Enter your password" autocomplete="off" required>
+                            <span class="input-icon">🔐</span>
+                        </div>
                     </div>
-                    <button type="submit">Login</button>
-                    <div class="error" id="userError">Invalid password</div>
+                    <button type="submit" id="userLoginBtn">
+                        <span id="userBtnText">Access Dashboard</span>
+                        <div class="loader" id="userLoader"></div>
+                    </button>
+                    <div class="error" id="userError">Invalid password. Please try again.</div>
                 </form>
             </div>
             
+            <!-- Admin Login -->
             <div id="adminTab" class="tab-content">
-                <form id="adminForm">
+                <form id="adminLoginForm">
                     <div class="form-group">
-                        <label>Username</label>
-                        <input type="text" id="adminUsername" required>
+                        <label for="adminUsername">Username</label>
+                        <div class="input-wrapper">
+                            <input type="text" id="adminUsername" placeholder="Enter admin username" autocomplete="off" required>
+                            <span class="input-icon">👤</span>
+                        </div>
                     </div>
                     <div class="form-group">
-                        <label>Password</label>
-                        <input type="password" id="adminPassword" required>
+                        <label for="adminPassword">Password</label>
+                        <div class="input-wrapper">
+                            <input type="password" id="adminPassword" placeholder="Enter admin password" autocomplete="off" required>
+                            <span class="input-icon">🔐</span>
+                        </div>
                     </div>
-                    <button type="submit">Login Admin</button>
-                    <div class="error" id="adminError">Invalid credentials</div>
+                    <button type="submit" id="adminLoginBtn">
+                        <span id="adminBtnText">Admin Access</span>
+                        <div class="loader" id="adminLoader"></div>
+                    </button>
+                    <div class="error" id="adminError">Invalid credentials. Please try again.</div>
                 </form>
+            </div>
+            
+            <div class="footer">
+                <p class="footer-text">Need assistance?</p>
+                <a href="https://discord.com/users/wispray" target="_blank" class="discord-link">
+                    <span>💬</span>
+                    <span>Contact on Discord</span>
+                </a>
             </div>
         </div>
     </div>
@@ -806,9 +649,21 @@ app.get('/', (req, res) => {
             }
         }
         
-        document.getElementById('userForm').addEventListener('submit', async (e) => {
+        // User Login
+        document.getElementById('userLoginForm').addEventListener('submit', async (e) => {
             e.preventDefault();
-            const password = document.getElementById('userPassword').value;
+            const password = document.getElementById('userPassword').value.trim();
+            const btn = document.getElementById('userLoginBtn');
+            const btnText = document.getElementById('userBtnText');
+            const loader = document.getElementById('userLoader');
+            const error = document.getElementById('userError');
+            
+            if (!password) return;
+            
+            btnText.style.display = 'none';
+            loader.style.display = 'block';
+            btn.disabled = true;
+            error.style.display = 'none';
             
             try {
                 const response = await fetch('/api/auth', {
@@ -822,17 +677,36 @@ app.get('/', (req, res) => {
                 if (data.success) {
                     window.location.href = '/dashboard?password=' + encodeURIComponent(password);
                 } else {
-                    document.getElementById('userError').style.display = 'block';
+                    error.style.display = 'block';
+                    document.getElementById('userPassword').value = '';
+                    document.getElementById('userPassword').focus();
                 }
             } catch (err) {
-                document.getElementById('userError').style.display = 'block';
+                error.style.display = 'block';
+                error.textContent = 'Connection error. Please try again.';
+            } finally {
+                btnText.style.display = 'block';
+                loader.style.display = 'none';
+                btn.disabled = false;
             }
         });
         
-        document.getElementById('adminForm').addEventListener('submit', async (e) => {
+        // Admin Login
+        document.getElementById('adminLoginForm').addEventListener('submit', async (e) => {
             e.preventDefault();
-            const username = document.getElementById('adminUsername').value;
-            const password = document.getElementById('adminPassword').value;
+            const username = document.getElementById('adminUsername').value.trim();
+            const password = document.getElementById('adminPassword').value.trim();
+            const btn = document.getElementById('adminLoginBtn');
+            const btnText = document.getElementById('adminBtnText');
+            const loader = document.getElementById('adminLoader');
+            const error = document.getElementById('adminError');
+            
+            if (!username || !password) return;
+            
+            btnText.style.display = 'none';
+            loader.style.display = 'block';
+            btn.disabled = true;
+            error.style.display = 'none';
             
             try {
                 const response = await fetch('/api/admin/auth', {
@@ -846,10 +720,17 @@ app.get('/', (req, res) => {
                 if (data.success) {
                     window.location.href = '/admin/dashboard?token=' + encodeURIComponent(data.token);
                 } else {
-                    document.getElementById('adminError').style.display = 'block';
+                    error.style.display = 'block';
+                    document.getElementById('adminPassword').value = '';
+                    document.getElementById('adminPassword').focus();
                 }
             } catch (err) {
-                document.getElementById('adminError').style.display = 'block';
+                error.style.display = 'block';
+                error.textContent = 'Connection error. Please try again.';
+            } finally {
+                btnText.style.display = 'block';
+                loader.style.display = 'none';
+                btn.disabled = false;
             }
         });
     </script>
@@ -858,7 +739,7 @@ app.get('/', (req, res) => {
     res.send(html);
 });
 
-// User Auth
+// 🔐 API: User Auth
 app.post('/api/auth', (req, res) => {
     const { password } = req.body;
     const game = authenticateGame(password);
@@ -870,11 +751,12 @@ app.post('/api/auth', (req, res) => {
     }
 });
 
-// Admin Auth
+// 🔐 API: Admin Auth
 app.post('/api/admin/auth', (req, res) => {
     const { username, password } = req.body;
     
     if (authenticateAdmin(username, password)) {
+        // Simple token (in production, use JWT or session)
         const token = Buffer.from(`${username}:${password}`).toString('base64');
         res.json({ success: true, token });
     } else {
@@ -882,7 +764,7 @@ app.post('/api/admin/auth', (req, res) => {
     }
 });
 
-// Change User Password
+// 🔐 API: Change User Password
 app.post('/api/user/change-password', (req, res) => {
     const { currentPassword, newPassword } = req.body;
     
@@ -900,6 +782,7 @@ app.post('/api/user/change-password', (req, res) => {
     if (dbGame) {
         dbGame.password = newPassword;
         if (writeDB(db)) {
+            // Reload games
             GAMES = initializeGames();
             res.json({ success: true, message: 'Password changed successfully' });
         } else {
@@ -910,7 +793,7 @@ app.post('/api/user/change-password', (req, res) => {
     }
 });
 
-// Admin Get Users
+// 🔐 API: Admin Get Users
 app.get('/api/admin/users', (req, res) => {
     const token = req.query.token;
     if (!token) {
@@ -941,7 +824,7 @@ app.get('/api/admin/users', (req, res) => {
     }
 });
 
-// Admin Reset User Password
+// 🔐 API: Admin Reset Password
 app.post('/api/admin/reset-password', (req, res) => {
     const { token, gameId, newPassword } = req.body;
     
@@ -970,6 +853,7 @@ app.post('/api/admin/reset-password', (req, res) => {
         
         game.password = newPassword;
         if (writeDB(db)) {
+            // Reload games
             GAMES = initializeGames();
             res.json({ success: true, message: 'Password reset successfully' });
         } else {
@@ -980,7 +864,7 @@ app.post('/api/admin/reset-password', (req, res) => {
     }
 });
 
-// User Dashboard (Original - unchanged)
+// 📊 User Dashboard
 app.get('/dashboard', (req, res) => {
     const password = req.query.password;
     const game = authenticateGame(password);
@@ -991,12 +875,983 @@ app.get('/dashboard', (req, res) => {
     
     const baseUrl = `https://${req.get('host')}`;
     
-    res.send(`[DASHBOARD HTML - Keep your original dashboard.html here]`);
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${game.name} - Dashboard</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background: #0a0e27;
+            color: #ffffff;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container { max-width: 1000px; margin: 0 auto; }
+        .header {
+            background: linear-gradient(135deg, rgba(139, 92, 246, 0.2), rgba(59, 130, 246, 0.2));
+            border: 1px solid rgba(139, 92, 246, 0.3);
+            border-radius: 20px;
+            padding: 32px;
+            margin-bottom: 32px;
+            backdrop-filter: blur(10px);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+        .header-left h1 {
+            font-size: 32px;
+            margin-bottom: 8px;
+            background: linear-gradient(135deg, #8b5cf6, #3b82f6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .header-left p { color: #94a3b8; font-size: 14px; }
+        .header-right {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+        .card {
+            background: rgba(15, 23, 42, 0.8);
+            border: 1px solid rgba(139, 92, 246, 0.2);
+            border-radius: 16px;
+            padding: 28px;
+            margin-bottom: 24px;
+            backdrop-filter: blur(10px);
+        }
+        .card h3 {
+            color: #8b5cf6;
+            font-size: 18px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 0;
+            border-bottom: 1px solid rgba(139, 92, 246, 0.1);
+            align-items: center;
+        }
+        .info-row:last-child { border-bottom: none; }
+        .info-label { color: #94a3b8; font-size: 14px; }
+        .info-value { color: #ffffff; font-weight: 500; font-size: 14px; }
+        .url-box {
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(139, 92, 246, 0.2);
+            border-radius: 10px;
+            padding: 16px;
+            margin: 12px 0;
+            position: relative;
+        }
+        .url-label {
+            color: #8b5cf6;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            margin-bottom: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .url-text {
+            color: #10b981;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            word-break: break-all;
+            line-height: 1.6;
+            padding: 12px;
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 8px;
+        }
+        .badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .badge-success {
+            background: rgba(16, 185, 129, 0.2);
+            color: #10b981;
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+        .badge-warning {
+            background: rgba(245, 158, 11, 0.2);
+            color: #f59e0b;
+            border: 1px solid rgba(245, 158, 11, 0.3);
+        }
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: linear-gradient(135deg, #8b5cf6, #3b82f6);
+            color: white;
+        }
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(139, 92, 246, 0.4);
+        }
+        .btn-secondary {
+            background: rgba(139, 92, 246, 0.2);
+            border: 1px solid rgba(139, 92, 246, 0.4);
+        }
+        .btn-secondary:hover {
+            background: rgba(139, 92, 246, 0.3);
+        }
+        .success-toast, .error-toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 16px 24px;
+            border-radius: 12px;
+            font-weight: 600;
+            display: none;
+            animation: slideIn 0.3s ease-out;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            z-index: 1000;
+        }
+        .success-toast {
+            background: rgba(16, 185, 129, 0.9);
+            color: white;
+        }
+        .error-toast {
+            background: rgba(239, 68, 68, 0.9);
+            color: white;
+        }
+        @keyframes slideIn {
+            from { transform: translateX(400px); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(5px);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        .modal.active {
+            display: flex;
+        }
+        .modal-content {
+            background: rgba(15, 23, 42, 0.95);
+            border: 1px solid rgba(139, 92, 246, 0.3);
+            border-radius: 20px;
+            padding: 32px;
+            max-width: 500px;
+            width: 100%;
+            animation: modalFadeIn 0.3s ease-out;
+        }
+        @keyframes modalFadeIn {
+            from { opacity: 0; transform: scale(0.9); }
+            to { opacity: 1; transform: scale(1); }
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+        }
+        .modal-header h2 {
+            color: #8b5cf6;
+            font-size: 24px;
+        }
+        .close-btn {
+            background: none;
+            border: none;
+            color: #94a3b8;
+            font-size: 24px;
+            cursor: pointer;
+            padding: 0;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 8px;
+            transition: all 0.3s;
+        }
+        .close-btn:hover {
+            background: rgba(139, 92, 246, 0.2);
+            color: #8b5cf6;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        .form-group label {
+            display: block;
+            color: #cbd5e1;
+            font-size: 14px;
+            font-weight: 500;
+            margin-bottom: 8px;
+        }
+        .form-group input {
+            width: 100%;
+            padding: 12px 16px;
+            background: rgba(15, 23, 42, 0.6);
+            border: 2px solid rgba(139, 92, 246, 0.2);
+            border-radius: 10px;
+            color: #ffffff;
+            font-size: 15px;
+            transition: all 0.3s;
+            outline: none;
+        }
+        .form-group input:focus {
+            border-color: #8b5cf6;
+            background: rgba(15, 23, 42, 0.9);
+        }
+        .modal-footer {
+            display: flex;
+            gap: 12px;
+            justify-content: flex-end;
+            margin-top: 24px;
+        }
+        @media (max-width: 768px) {
+            .header { padding: 24px; flex-direction: column; }
+            .header-left h1 { font-size: 24px; }
+            .card { padding: 20px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="success-toast" id="successToast"></div>
+    <div class="error-toast" id="errorToast"></div>
+    
+    <!-- Change Password Modal -->
+    <div class="modal" id="changePasswordModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>🔐 Change Password</h2>
+                <button class="close-btn" onclick="closeModal()">&times;</button>
+            </div>
+            <form id="changePasswordForm">
+                <div class="form-group">
+                    <label>Current Password</label>
+                    <input type="password" id="currentPassword" required>
+                </div>
+                <div class="form-group">
+                    <label>New Password</label>
+                    <input type="password" id="newPassword" minlength="6" required>
+                </div>
+                <div class="form-group">
+                    <label>Confirm New Password</label>
+                    <input type="password" id="confirmPassword" minlength="6" required>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                    <button type="submit" class="btn">Change Password</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <div class="container">
+        <div class="header">
+            <div class="header-left">
+                <h1>🎮 ${game.name}</h1>
+                <p>Webhook Integration Dashboard</p>
+            </div>
+            <div class="header-right">
+                <button class="btn btn-secondary" onclick="openChangePasswordModal()">🔑 Change Password</button>
+                <button class="btn" onclick="window.location.href='/'">🚪 Logout</button>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h3>📋 Game Information</h3>
+            <div class="info-row">
+                <span class="info-label">Universe ID</span>
+                <span class="info-value">${game.universeId}</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Topic</span>
+                <span class="info-value">${game.topic}</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Webhook Secret</span>
+                <span class="info-value">
+                    <span class="badge badge-success">✓ Configured</span>
+                </span>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h3>🔐 Security Status</h3>
+            <div class="info-row">
+                <span class="info-label">Saweria Token</span>
+                <span class="info-value">
+                    <span class="badge ${game.saweriaToken ? 'badge-success' : 'badge-warning'}">
+                        ${game.saweriaToken ? '✓ Configured' : '⚠ Optional'}
+                    </span>
+                </span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">SocialBuzz Token</span>
+                <span class="info-value">
+                    <span class="badge ${game.socialbuzzToken ? 'badge-success' : 'badge-warning'}">
+                        ${game.socialbuzzToken ? '✓ Configured' : '⚠ Optional'}
+                    </span>
+                </span>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h3>🔗 Webhook URLs</h3>
+            <p style="color: #94a3b8; font-size: 13px; margin-bottom: 20px;">
+                Gunakan URL berikut di settings Saweria dan SocialBuzz. Klik "Copy" untuk menyalin.
+            </p>
+            
+            <div class="url-box">
+                <div class="url-label">
+                    <span>📡 Saweria Webhook</span>
+                    <button class="btn" onclick="copyUrl('saweriaUrl')">📋 Copy</button>
+                </div>
+                <div class="url-text" id="saweriaUrl">${baseUrl}/${game.webhookSecret}/saweria</div>
+            </div>
+            
+            <div class="url-box">
+                <div class="url-label">
+                    <span>📡 SocialBuzz Webhook</span>
+                    <button class="btn" onclick="copyUrl('socialbuzzUrl')">📋 Copy</button>
+                </div>
+                <div class="url-text" id="socialbuzzUrl">${baseUrl}/${game.webhookSecret}/socialbuzz</div>
+            </div>
+            
+            <div class="url-box">
+                <div class="url-label">
+                    <span>🧪 Test Endpoint</span>
+                    <button class="btn" onclick="copyUrl('testUrl')">📋 Copy</button>
+                </div>
+                <div class="url-text" id="testUrl">${baseUrl}/${game.webhookSecret}/test?password=${encodeURIComponent(password)}</div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h3>💡 Quick Tips</h3>
+            <div style="color: #94a3b8; font-size: 14px; line-height: 1.8;">
+                <p>• Donatur format: <code style="color: #10b981;">[RobloxUsername] Message</code></p>
+                <p>• Webhook secret minimal 16 karakter</p>
+                <p>• Token verification otomatis jika di-set</p>
+                <p>• Jangan share webhook URLs ke siapapun</p>
+                <p>• Gunakan tombol "Change Password" untuk ganti password</p>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        const currentPassword = '${password}';
+        
+        function openChangePasswordModal() {
+            document.getElementById('changePasswordModal').classList.add('active');
+            document.getElementById('currentPassword').focus();
+        }
+        
+        function closeModal() {
+            document.getElementById('changePasswordModal').classList.remove('active');
+            document.getElementById('changePasswordForm').reset();
+        }
+        
+        document.getElementById('changePasswordForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const currentPwd = document.getElementById('currentPassword').value;
+            const newPwd = document.getElementById('newPassword').value;
+            const confirmPwd = document.getElementById('confirmPassword').value;
+            
+            if (newPwd !== confirmPwd) {
+                showToast('Passwords do not match', 'error');
+                return;
+            }
+            
+            if (newPwd.length < 6) {
+                showToast('Password must be at least 6 characters', 'error');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/user/change-password', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        currentPassword: currentPwd,
+                        newPassword: newPwd
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showToast('Password changed successfully! Redirecting...', 'success');
+                    setTimeout(() => {
+                        window.location.href = '/dashboard?password=' + encodeURIComponent(newPwd);
+                    }, 2000);
+                } else {
+                    showToast(data.error || 'Failed to change password', 'error');
+                }
+            } catch (error) {
+                showToast('Connection error. Please try again.', 'error');
+            }
+        });
+        
+        function copyUrl(elementId) {
+            const element = document.getElementById(elementId);
+            const text = element.textContent;
+            
+            navigator.clipboard.writeText(text).then(() => {
+                showToast('URL copied to clipboard!', 'success');
+            }).catch(() => {
+                const tempInput = document.createElement('input');
+                tempInput.value = text;
+                document.body.appendChild(tempInput);
+                tempInput.select();
+                document.execCommand('copy');
+                document.body.removeChild(tempInput);
+                showToast('URL copied to clipboard!', 'success');
+            });
+        }
+        
+        function showToast(message, type = 'success') {
+            const toastId = type === 'success' ? 'successToast' : 'errorToast';
+            const toast = document.getElementById(toastId);
+            toast.textContent = message;
+            toast.style.display = 'block';
+            setTimeout(() => {
+                toast.style.display = 'none';
+            }, 3000);
+        }
+        
+        // Close modal on outside click
+        document.getElementById('changePasswordModal').addEventListener('click', (e) => {
+            if (e.target.id === 'changePasswordModal') {
+                closeModal();
+            }
+        });
+    </script>
+</body>
+</html>`;
+    res.send(html);
 });
 
-// Admin Dashboard (NEW - with license management)
-app.get('/admin/dashboard', (req, res) => {
-    res.sendFile(path.join(__dirname, 'admin-license.html'));
+// 📊 Admin Dashboard
+app.get('/admin/dashboard', async (req, res) => {
+    const token = req.query.token;
+    
+    if (!token) {
+        return res.redirect('/');
+    }
+    
+    try {
+        const decoded = Buffer.from(token, 'base64').toString('utf-8');
+        const [username, password] = decoded.split(':');
+        
+        if (!authenticateAdmin(username, password)) {
+            return res.redirect('/');
+        }
+    } catch (error) {
+        return res.redirect('/');
+    }
+    
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard - Archie Webhook</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background: #0a0e27;
+            color: #ffffff;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .header {
+            background: linear-gradient(135deg, rgba(139, 92, 246, 0.2), rgba(59, 130, 246, 0.2));
+            border: 1px solid rgba(139, 92, 246, 0.3);
+            border-radius: 20px;
+            padding: 32px;
+            margin-bottom: 32px;
+            backdrop-filter: blur(10px);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+        .header-left h1 {
+            font-size: 32px;
+            margin-bottom: 8px;
+            background: linear-gradient(135deg, #8b5cf6, #3b82f6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .header-left p { color: #94a3b8; font-size: 14px; }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 32px;
+        }
+        .stat-card {
+            background: rgba(15, 23, 42, 0.8);
+            border: 1px solid rgba(139, 92, 246, 0.2);
+            border-radius: 16px;
+            padding: 24px;
+            backdrop-filter: blur(10px);
+        }
+        .stat-card h3 {
+            color: #94a3b8;
+            font-size: 14px;
+            margin-bottom: 12px;
+            font-weight: 500;
+        }
+        .stat-card .value {
+            font-size: 36px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #8b5cf6, #3b82f6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .card {
+            background: rgba(15, 23, 42, 0.8);
+            border: 1px solid rgba(139, 92, 246, 0.2);
+            border-radius: 16px;
+            padding: 28px;
+            margin-bottom: 24px;
+            backdrop-filter: blur(10px);
+        }
+        .card h2 {
+            color: #8b5cf6;
+            font-size: 24px;
+            margin-bottom: 24px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .table-container {
+            overflow-x: auto;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        thead {
+            background: rgba(139, 92, 246, 0.1);
+        }
+        th, td {
+            padding: 16px;
+            text-align: left;
+            border-bottom: 1px solid rgba(139, 92, 246, 0.1);
+        }
+        th {
+            color: #8b5cf6;
+            font-weight: 600;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        td {
+            color: #cbd5e1;
+            font-size: 14px;
+        }
+        tbody tr {
+            transition: background 0.2s;
+        }
+        tbody tr:hover {
+            background: rgba(139, 92, 246, 0.05);
+        }
+        .badge {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .badge-success {
+            background: rgba(16, 185, 129, 0.2);
+            color: #10b981;
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+        .badge-active {
+            background: rgba(59, 130, 246, 0.2);
+            color: #3b82f6;
+            border: 1px solid rgba(59, 130, 246, 0.3);
+        }
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: linear-gradient(135deg, #8b5cf6, #3b82f6);
+            color: white;
+        }
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(139, 92, 246, 0.4);
+        }
+        .btn-danger {
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+        }
+        .btn-secondary {
+            background: rgba(139, 92, 246, 0.2);
+            border: 1px solid rgba(139, 92, 246, 0.4);
+        }
+        .success-toast, .error-toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 16px 24px;
+            border-radius: 12px;
+            font-weight: 600;
+            display: none;
+            animation: slideIn 0.3s ease-out;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            z-index: 1000;
+        }
+        .success-toast {
+            background: rgba(16, 185, 129, 0.9);
+            color: white;
+        }
+        .error-toast {
+            background: rgba(239, 68, 68, 0.9);
+            color: white;
+        }
+        @keyframes slideIn {
+            from { transform: translateX(400px); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(5px);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        .modal.active {
+            display: flex;
+        }
+        .modal-content {
+            background: rgba(15, 23, 42, 0.95);
+            border: 1px solid rgba(139, 92, 246, 0.3);
+            border-radius: 20px;
+            padding: 32px;
+            max-width: 500px;
+            width: 100%;
+            animation: modalFadeIn 0.3s ease-out;
+        }
+        @keyframes modalFadeIn {
+            from { opacity: 0; transform: scale(0.9); }
+            to { opacity: 1; transform: scale(1); }
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+        }
+        .modal-header h2 {
+            color: #8b5cf6;
+            font-size: 24px;
+        }
+        .close-btn {
+            background: none;
+            border: none;
+            color: #94a3b8;
+            font-size: 24px;
+            cursor: pointer;
+            padding: 0;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 8px;
+            transition: all 0.3s;
+        }
+        .close-btn:hover {
+            background: rgba(139, 92, 246, 0.2);
+            color: #8b5cf6;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        .form-group label {
+            display: block;
+            color: #cbd5e1;
+            font-size: 14px;
+            font-weight: 500;
+            margin-bottom: 8px;
+        }
+        .form-group input {
+            width: 100%;
+            padding: 12px 16px;
+            background: rgba(15, 23, 42, 0.6);
+            border: 2px solid rgba(139, 92, 246, 0.2);
+            border-radius: 10px;
+            color: #ffffff;
+            font-size: 15px;
+            transition: all 0.3s;
+            outline: none;
+        }
+        .form-group input:focus {
+            border-color: #8b5cf6;
+            background: rgba(15, 23, 42, 0.9);
+        }
+        .modal-footer {
+            display: flex;
+            gap: 12px;
+            justify-content: flex-end;
+            margin-top: 24px;
+        }
+        .loading {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="success-toast" id="successToast"></div>
+    <div class="error-toast" id="errorToast"></div>
+    
+    <!-- Reset Password Modal -->
+    <div class="modal" id="resetPasswordModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>🔐 Reset Password</h2>
+                <button class="close-btn" onclick="closeModal()">&times;</button>
+            </div>
+            <form id="resetPasswordForm">
+                <input type="hidden" id="resetGameId">
+                <div class="form-group">
+                    <label>Game Name</label>
+                    <input type="text" id="resetGameName" readonly style="opacity: 0.7;">
+                </div>
+                <div class="form-group">
+                    <label>New Password</label>
+                    <input type="text" id="resetNewPassword" minlength="6" required placeholder="Enter new password">
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                    <button type="submit" class="btn btn-danger">Reset Password</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <div class="container">
+        <div class="header">
+            <div class="header-left">
+                <h1>🔐 Admin Dashboard</h1>
+                <p>User Management & System Overview</p>
+            </div>
+            <button class="btn" onclick="window.location.href='/'">🚪 Logout</button>
+        </div>
+        
+        <div class="stats">
+            <div class="stat-card">
+                <h3>Total Users</h3>
+                <div class="value" id="totalUsers">0</div>
+            </div>
+            <div class="stat-card">
+                <h3>Active Games</h3>
+                <div class="value" id="activeGames">0</div>
+            </div>
+            <div class="stat-card">
+                <h3>System Status</h3>
+                <div class="value" style="font-size: 24px;">🟢 Online</div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h2>👥 User Management</h2>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Game ID</th>
+                            <th>Game Name</th>
+                            <th>Universe ID</th>
+                            <th>Last Active</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="usersTableBody">
+                        <tr>
+                            <td colspan="6" style="text-align: center; padding: 40px;">
+                                <div class="loading"></div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        const token = '${token}';
+        
+        async function loadUsers() {
+            try {
+                const response = await fetch('/api/admin/users?token=' + encodeURIComponent(token));
+                const data = await response.json();
+                
+                if (data.success) {
+                    const users = data.users;
+                    document.getElementById('totalUsers').textContent = users.length;
+                    document.getElementById('activeGames').textContent = users.length;
+                    
+                    const tbody = document.getElementById('usersTableBody');
+                    tbody.innerHTML = '';
+                    
+                    if (users.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 40px; color: #64748b;">No users found</td></tr>';
+                        return;
+                    }
+                    
+                    users.forEach(user => {
+                        const lastActive = user.lastActive ? new Date(user.lastActive).toLocaleString() : 'Never';
+                        const tr = document.createElement('tr');
+                        tr.innerHTML = \`
+                            <td><span class="badge badge-active">\${user.id}</span></td>
+                            <td><strong>\${user.name}</strong></td>
+                            <td style="font-family: monospace; font-size: 12px;">\${user.universeId}</td>
+                            <td style="font-size: 12px;">\${lastActive}</td>
+                            <td><span class="badge badge-success">✓ Active</span></td>
+                            <td>
+                                <button class="btn btn-danger" onclick="openResetModal('\${user.id}', '\${user.name}')">
+                                    🔑 Reset Password
+                                </button>
+                            </td>
+                        \`;
+                        tbody.appendChild(tr);
+                    });
+                }
+            } catch (error) {
+                console.error('Error loading users:', error);
+                showToast('Failed to load users', 'error');
+            }
+        }
+        
+        function openResetModal(gameId, gameName) {
+            document.getElementById('resetGameId').value = gameId;
+            document.getElementById('resetGameName').value = gameName;
+            document.getElementById('resetNewPassword').value = '';
+            document.getElementById('resetPasswordModal').classList.add('active');
+            document.getElementById('resetNewPassword').focus();
+        }
+        
+        function closeModal() {
+            document.getElementById('resetPasswordModal').classList.remove('active');
+            document.getElementById('resetPasswordForm').reset();
+        }
+        
+        document.getElementById('resetPasswordForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const gameId = document.getElementById('resetGameId').value;
+            const newPassword = document.getElementById('resetNewPassword').value;
+            
+            if (newPassword.length < 6) {
+                showToast('Password must be at least 6 characters', 'error');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/admin/reset-password', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        token: token,
+                        gameId: gameId,
+                        newPassword: newPassword
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showToast('Password reset successfully!', 'success');
+                    closeModal();
+                    loadUsers(); // Reload users
+                } else {
+                    showToast(data.error || 'Failed to reset password', 'error');
+                }
+            } catch (error) {
+                showToast('Connection error. Please try again.', 'error');
+            }
+        });
+        
+        function showToast(message, type = 'success') {
+            const toastId = type === 'success' ? 'successToast' : 'errorToast';
+            const toast = document.getElementById(toastId);
+            toast.textContent = message;
+            toast.style.display = 'block';
+            setTimeout(() => {
+                toast.style.display = 'none';
+            }, 3000);
+        }
+        
+        // Close modal on outside click
+        document.getElementById('resetPasswordModal').addEventListener('click', (e) => {
+            if (e.target.id === 'resetPasswordModal') {
+                closeModal();
+            }
+        });
+        
+        // Load users on page load
+        loadUsers();
+        
+        // Auto refresh every 30 seconds
+        setInterval(loadUsers, 30000);
+    </script>
+</body>
+</html>`;
+    res.send(html);
 });
 
 // 404
