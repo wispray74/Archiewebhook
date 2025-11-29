@@ -155,14 +155,41 @@ function verifyWebhookToken(req, expectedToken) {
     return token === expectedToken;
 }
 
+// ✅ PERBAIKAN: Fungsi extractUsername yang lebih robust
 function extractUsername(message, donatorName) {
-    if (!message) return donatorName;
-    const bracketMatch = message.match(/^\[(\w+)\]/);
-    if (bracketMatch) return bracketMatch[1];
-    const atMatch = message.match(/^@(\w+)/);
-    if (atMatch) return atMatch[1];
-    const colonMatch = message.match(/^(\w+):/);
-    if (colonMatch) return colonMatch[1];
+    if (!message || message.trim() === '') return donatorName;
+    
+    const trimmedMessage = message.trim();
+    
+    // Format: [username] atau [username]message
+    const bracketMatch = trimmedMessage.match(/^\[([^\]]+)\]/);
+    if (bracketMatch && bracketMatch[1].trim()) {
+        return bracketMatch[1].trim();
+    }
+    
+    // Format: @username atau @username message
+    const atMatch = trimmedMessage.match(/^@([^\s]+)/);
+    if (atMatch && atMatch[1].trim()) {
+        return atMatch[1].trim();
+    }
+    
+    // Format: username: message
+    const colonMatch = trimmedMessage.match(/^([^\s:]+):/);
+    if (colonMatch && colonMatch[1].trim()) {
+        return colonMatch[1].trim();
+    }
+    
+    // Format: username (word pertama jika tidak ada format khusus)
+    // Hanya ambil jika kata pertama terlihat seperti username
+    const firstWord = trimmedMessage.split(/\s+/)[0];
+    if (firstWord && firstWord.length >= 3 && firstWord.length <= 20) {
+        // Cek apakah kata pertama terlihat seperti username (alphanumeric + underscore)
+        // DAN harus mengandung setidaknya satu angka atau underscore (untuk membedakan dari kata biasa)
+        if (/^[a-zA-Z0-9_]+$/.test(firstWord) && /[0-9_]/.test(firstWord)) {
+            return firstWord;
+        }
+    }
+    
     return donatorName;
 }
 
@@ -232,9 +259,10 @@ GAMES.forEach(game => {
         }
     });
     
-    // SocialBuzz
+    // ✅ PERBAIKAN: SocialBuzz webhook dengan logging lebih detail
     app.post(`/${game.webhookSecret}/socialbuzz`, async (req, res) => {
         console.log(`\n📩 [${game.name}] SocialBuzz webhook received`);
+        console.log('📦 Raw payload:', JSON.stringify(req.body, null, 2));
         
         if (game.socialbuzzToken && !verifyWebhookToken(req, game.socialbuzzToken)) {
             console.log(`❌ [${game.name}] Unauthorized - Invalid token`);
@@ -246,18 +274,27 @@ GAMES.forEach(game => {
             return res.status(400).json({ success: false, error: 'No payload' });
         }
         
+        // ✅ Ekstraksi data yang lebih lengkap dari berbagai field yang mungkin
+        const rawMessage = payload.message || payload.supporter_message || payload.note || payload.comment || '';
+        const rawName = payload.supporter_name || payload.name || payload.donator_name || 'Anonymous';
+        
+        console.log('📝 Extracted message:', rawMessage);
+        console.log('👤 Extracted name:', rawName);
+        
+        const extractedUsername = extractUsername(rawMessage, rawName);
+        console.log('✅ Final username:', extractedUsername);
+        
         const donationData = {
-            username: extractUsername(
-                payload.message || payload.supporter_message || payload.note || '',
-                payload.supporter_name || payload.name || 'Anonymous'
-            ),
-            displayName: payload.supporter_name || payload.name || 'Anonymous',
-            amount: Math.floor(payload.amount || payload.donation_amount || 0),
+            username: extractedUsername,
+            displayName: rawName,
+            amount: Math.floor(payload.amount || payload.donation_amount || payload.amount_raw || 0),
             timestamp: Math.floor(Date.now() / 1000),
             source: 'SocialBuzz',
-            message: payload.message || payload.supporter_message || payload.note || '',
+            message: rawMessage,
             email: payload.supporter_email || payload.email || ''
         };
+        
+        console.log('📤 Donation data to send:', JSON.stringify(donationData, null, 2));
         
         try {
             await sendToRoblox(game, donationData);
@@ -1251,6 +1288,9 @@ app.get('/dashboard', (req, res) => {
             <h3>💡 Quick Tips</h3>
             <div style="color: #94a3b8; font-size: 14px; line-height: 1.8;">
                 <p>• Donatur format: <code style="color: #10b981;">[RobloxUsername] Message</code></p>
+                <p>• Alternatif: <code style="color: #10b981;">@RobloxUsername Message</code></p>
+                <p>• Alternatif: <code style="color: #10b981;">RobloxUsername: Message</code></p>
+                <p>• Alternatif: <code style="color: #10b981;">RobloxUsername (tanpa format khusus)</code></p>
                 <p>• Webhook secret minimal 16 karakter</p>
                 <p>• Token verification otomatis jika di-set</p>
                 <p>• Jangan share webhook URLs ke siapapun</p>
