@@ -13,8 +13,18 @@ app.use(express.json({ verify: (req, res, buf, encoding) => {
 }}));
 app.use(express.urlencoded({ extended: true }));
 
-// 📁 Database file path
-const DB_FILE = path.join(__dirname, 'users.json');
+// 📁 Database file path - Use Railway Volume if available
+const VOLUME_PATH = process.env.VOLUME_PATH || __dirname;
+const DB_FILE = path.join(VOLUME_PATH, 'users.json');
+
+// Create volume directory if it doesn't exist
+if (process.env.VOLUME_PATH && !fs.existsSync(VOLUME_PATH)) {
+    fs.mkdirSync(VOLUME_PATH, { recursive: true });
+    console.log(`📁 Created volume directory: ${VOLUME_PATH}`);
+}
+
+console.log(`💾 Database location: ${DB_FILE}`);
+console.log(`📂 Using ${process.env.VOLUME_PATH ? 'Railway Volume (Persistent)' : 'Local Storage (Ephemeral)'}`);
 
 // 🔧 Database helper functions
 function readDB() {
@@ -28,6 +38,7 @@ function readDB() {
                 games: []
             };
             fs.writeFileSync(DB_FILE, JSON.stringify(initialData, null, 2));
+            console.log('✅ Created new database file');
             return initialData;
         }
         return JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
