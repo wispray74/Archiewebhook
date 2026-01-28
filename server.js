@@ -61,41 +61,41 @@ function writeDB(data) {
 // 🎮 Initialize games from environment variables and database
 function initializeGames() {
     const db = readDB();
-    const envGames = [
-        {
-            id: 'game1',
-            name: process.env.GAME_1_NAME || 'Game 1',
-            universeId: process.env.GAME_1_UNIVERSE_ID,
-            apiKey: process.env.GAME_1_API_KEY,
-            topic: process.env.GAME_1_TOPIC || 'ArchieDonationIDR',
-            webhookSecret: process.env.GAME_1_WEBHOOK_SECRET,
-            password: process.env.GAME_1_PASSWORD,
-            saweriaToken: process.env.GAME_1_SAWERIA_TOKEN,
-            socialbuzzToken: process.env.GAME_1_SOCIALBUZZ_TOKEN
-        },
-        {
-            id: 'game2',
-            name: process.env.GAME_2_NAME || 'Game 2',
-            universeId: process.env.GAME_2_UNIVERSE_ID,
-            apiKey: process.env.GAME_2_API_KEY,
-            topic: process.env.GAME_2_TOPIC || 'ArchieDonationIDR',
-            webhookSecret: process.env.GAME_2_WEBHOOK_SECRET,
-            password: process.env.GAME_2_PASSWORD,
-            saweriaToken: process.env.GAME_2_SAWERIA_TOKEN,
-            socialbuzzToken: process.env.GAME_2_SOCIALBUZZ_TOKEN
-        },
-        {
-            id: 'game3',
-            name: process.env.GAME_3_NAME || 'Game 3',
-            universeId: process.env.GAME_3_UNIVERSE_ID,
-            apiKey: process.env.GAME_3_API_KEY,
-            topic: process.env.GAME_3_TOPIC || 'ArchieDonationIDR',
-            webhookSecret: process.env.GAME_3_WEBHOOK_SECRET,
-            password: process.env.GAME_3_PASSWORD,
-            saweriaToken: process.env.GAME_3_SAWERIA_TOKEN,
-            socialbuzzToken: process.env.GAME_3_SOCIALBUZZ_TOKEN
+    const envGames = [];
+    
+    // ✅ PERBAIKAN: Dinamis membaca semua GAME_X_* dari environment variables
+    let gameIndex = 1;
+    while (true) {
+        const universeId = process.env[`GAME_${gameIndex}_UNIVERSE_ID`];
+        const apiKey = process.env[`GAME_${gameIndex}_API_KEY`];
+        const webhookSecret = process.env[`GAME_${gameIndex}_WEBHOOK_SECRET`];
+        const password = process.env[`GAME_${gameIndex}_PASSWORD`];
+        
+        // Jika tidak ada required fields, stop loop
+        if (!universeId || !apiKey || !webhookSecret || !password) {
+            break;
         }
-    ].filter(game => game.universeId && game.apiKey && game.webhookSecret && game.password);
+        
+        envGames.push({
+            id: `game${gameIndex}`,
+            name: process.env[`GAME_${gameIndex}_NAME`] || `Game ${gameIndex}`,
+            universeId: universeId,
+            apiKey: apiKey,
+            topic: process.env[`GAME_${gameIndex}_TOPIC`] || 'ArchieDonationIDR',
+            webhookSecret: webhookSecret,
+            password: password,
+            saweriaToken: process.env[`GAME_${gameIndex}_SAWERIA_TOKEN`],
+            socialbuzzToken: process.env[`GAME_${gameIndex}_SOCIALBUZZ_TOKEN`]
+        });
+        
+        gameIndex++;
+        
+        // Safety limit untuk mencegah infinite loop
+        if (gameIndex > 100) {
+            console.warn('⚠️ Reached maximum game limit (100)');
+            break;
+        }
+    }
 
     // Merge with database games
     const mergedGames = [];
@@ -139,6 +139,9 @@ if (GAMES.length === 0) {
 }
 
 console.log('🎮 Archie Webhook - ' + GAMES.length + ' games configured');
+GAMES.forEach(game => {
+    console.log(`   📌 ${game.id}: ${game.name} (Universe: ${game.universeId})`);
+});
 
 // 🔐 Auth Helpers
 function authenticateGame(password) {
