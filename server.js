@@ -196,6 +196,9 @@ function loadEnvGames() {
 async function authenticateGame(password) {
     if (!password) return null;
     try {
+        const { rows: allPwds } = await pool.query('SELECT game_id, LENGTH(password) as len FROM game_passwords');
+        console.log('[AUTH] passwords in DB:', allPwds.length, '| input len:', password.length);
+        allPwds.forEach(p => console.log('  game_id=' + p.game_id + ' pwd_len=' + p.len));
         const { rows } = await pool.query(`
             SELECT g.*
             FROM games g
@@ -203,9 +206,11 @@ async function authenticateGame(password) {
             WHERE gp.password = $1
             LIMIT 1
         `, [password]);
+        if (rows[0]) console.log('[AUTH] matched:', rows[0].id, rows[0].name);
+        else console.log('[AUTH] no match');
         return rows[0] ? rowToGame(rows[0]) : null;
     } catch (e) {
-        console.error('❌ authenticateGame error:', e.message);
+        console.error('authenticateGame error:', e.message);
         return null;
     }
 }
@@ -834,7 +839,7 @@ app.get('/dashboard', async (req, res) => {
 
 <script>
 (function() {
-  // Semua data game diambil dari server-side — tidak ada interpolasi string rawan inject
+  // Semua data game diambil dari server-side via JSON.stringify — aman dari injection
   var CFG = {
     pwd:     ${JSON.stringify(String(password))},
     sawUrl:  ${JSON.stringify(baseUrl + '/' + String(game.webhookSecret) + '/saweria')},
@@ -842,12 +847,8 @@ app.get('/dashboard', async (req, res) => {
     testUrl: ${JSON.stringify(baseUrl + '/' + String(game.webhookSecret) + '/test')}
   };
 
-  // Set URL setelah DOM load supaya tidak ada interpolasi di HTML
-  document.getElementById('sawURL').textContent  = CFG.sawUrl;
-  document.getElementById('sbURL').textContent   = CFG.sbUrl;
-  document.getElementById('testURL').textContent = CFG.testUrl + '?password=' + encodeURIComponent(CFG.pwd);
-
   var donPage=0, donTotal=0, donLimit=50, searchTimer=null, statsLoaded=false, lbLoaded=false;
+  var settingsUrlsSet = false;
 
   // ─ navigation ──────────────────────────────────────────────────────────────
   window.switchPage = function(id) {
@@ -860,6 +861,13 @@ app.get('/dashboard', async (req, res) => {
     if (id === 'overview' && !statsLoaded)   loadStats();
     if (id === 'history')                    loadDonations(0);
     if (id === 'leaderboard' && !lbLoaded)   loadLeaderboard();
+    // Set URL text hanya saat tab settings dibuka, setelah DOM pasti visible
+    if (id === 'settings' && !settingsUrlsSet) {
+      settingsUrlsSet = true;
+      document.getElementById('sawURL').textContent  = CFG.sawUrl;
+      document.getElementById('sbURL').textContent   = CFG.sbUrl;
+      document.getElementById('testURL').textContent = CFG.testUrl + '?password=' + encodeURIComponent(CFG.pwd);
+    }
   };
 
   // ─ utils ───────────────────────────────────────────────────────────────────
