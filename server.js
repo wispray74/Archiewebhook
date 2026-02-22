@@ -374,16 +374,17 @@ app.post('/api/admin/auth', (req, res) => {
 //  API — user password change
 // ─────────────────────────────────────────────────────────────────────────────
 app.post('/api/user/change-password', async (req, res) => {
-    const { currentPassword, newPassword } = req.body;
-    if (!newPassword || newPassword.length < 6)
-        return res.json({ success: false, error: 'Password minimal 6 karakter' });
-    const game = await authenticateGame(currentPassword);
-    if (!game) return res.json({ success: false, error: 'Password saat ini salah' });
     try {
+        const { currentPassword, newPassword } = req.body;
+        if (!newPassword || newPassword.length < 6)
+            return res.json({ success: false, error: 'Password minimal 6 karakter' });
+        const game = await authenticateGame(currentPassword);
+        if (!game) return res.json({ success: false, error: 'Password saat ini salah' });
         await dbSetPassword(game.id, newPassword);
         res.json({ success: true, message: 'Password berhasil diubah' });
     } catch (e) {
-        res.json({ success: false, error: 'Gagal menyimpan password' });
+        console.error('❌ change-password error:', e.message);
+        res.status(500).json({ success: false, error: 'Server error: ' + e.message });
     }
 });
 
@@ -391,23 +392,33 @@ app.post('/api/user/change-password', async (req, res) => {
 //  API — donation history (user)
 // ─────────────────────────────────────────────────────────────────────────────
 app.get('/api/user/donations', async (req, res) => {
-    const game = await authenticateGame(req.query.password);
-    if (!game) return res.status(401).json({ success: false, error: 'Unauthorized' });
-    const limit  = Math.min(parseInt(req.query.limit)  || 50, 200);
-    const offset = parseInt(req.query.offset) || 0;
-    const search = req.query.search || '';
-    const [rows, total] = await Promise.all([
-        dbGetDonations(game.id, { limit, offset, search }),
-        dbCountDonations(game.id, search)
-    ]);
-    res.json({ success: true, donations: rows, total, limit, offset });
+    try {
+        const game = await authenticateGame(req.query.password);
+        if (!game) return res.status(401).json({ success: false, error: 'Unauthorized — password salah' });
+        const limit  = Math.min(parseInt(req.query.limit)  || 50, 200);
+        const offset = parseInt(req.query.offset) || 0;
+        const search = req.query.search || '';
+        const [rows, total] = await Promise.all([
+            dbGetDonations(game.id, { limit, offset, search }),
+            dbCountDonations(game.id, search)
+        ]);
+        res.json({ success: true, donations: rows, total, limit, offset });
+    } catch (e) {
+        console.error('❌ /api/user/donations error:', e.message);
+        res.status(500).json({ success: false, error: 'Server error: ' + e.message });
+    }
 });
 
 app.get('/api/user/donations/stats', async (req, res) => {
-    const game = await authenticateGame(req.query.password);
-    if (!game) return res.status(401).json({ success: false, error: 'Unauthorized' });
-    const stats = await dbGetDonationStats(game.id);
-    res.json({ success: true, ...stats });
+    try {
+        const game = await authenticateGame(req.query.password);
+        if (!game) return res.status(401).json({ success: false, error: 'Unauthorized — password salah' });
+        const stats = await dbGetDonationStats(game.id);
+        res.json({ success: true, ...stats });
+    } catch (e) {
+        console.error('❌ /api/user/donations/stats error:', e.message);
+        res.status(500).json({ success: false, error: 'Server error: ' + e.message });
+    }
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1684,10 +1695,28 @@ setInterval(loadUsers, 30000);
 </body></html>`);
 });
 
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Debug — test auth & DB (hapus setelah debugging selesai)
+// ─────────────────────────────────────────────────────────────────────────────
+app.get('/api/debug/auth', async (req, res) => {
+    const { password } = req.query;
+    if (!password) return res.json({ ok: false, error: 'No password provided' });
+    try {
+        const game = await authenticateGame(password);
+        if (!game) return res.json({ ok: false, error: 'Auth failed — no game matches password' });
+        const { rows } = await pool.query('SELECT COUNT(*) AS cnt FROM donations WHERE game_id = $1', [game.id]);
+        res.json({ ok: true, gameId: game.id, gameName: game.name, donationCount: parseInt(rows[0].cnt) });
+    } catch (e) {
+        res.json({ ok: false, error: e.message });
+    }
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 //  404
 // ─────────────────────────────────────────────────────────────────────────────
 app.use((_req, res) => res.status(404).json({ error: 'Not found' }));
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Auto-migrate & start
