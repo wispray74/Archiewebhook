@@ -195,12 +195,19 @@ function loadEnvGames() {
 // ─────────────────────────────────────────────────────────────────────────────
 async function authenticateGame(password) {
     if (!password) return null;
-    const games = await dbGetAllGames();
-    for (const game of games) {
-        const pwd = await dbGetPassword(game.id).catch(() => null);
-        if (pwd && pwd === password) return game;
+    try {
+        const { rows } = await pool.query(`
+            SELECT g.*
+            FROM games g
+            JOIN game_passwords gp ON gp.game_id = g.id
+            WHERE gp.password = $1
+            LIMIT 1
+        `, [password]);
+        return rows[0] ? rowToGame(rows[0]) : null;
+    } catch (e) {
+        console.error('❌ authenticateGame error:', e.message);
+        return null;
     }
-    return null;
 }
 
 function authenticateAdmin(username, password) {
