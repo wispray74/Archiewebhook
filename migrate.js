@@ -7,7 +7,23 @@ async function migrate() {
         console.log('🔄 Running migrations...');
         await client.query('BEGIN');
 
-        // ─── game_passwords ───────────────────────────────────────────────
+        // ─── games ────────────────────────────────────────────────────────────
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS games (
+                id               VARCHAR(50)  PRIMARY KEY,
+                name             VARCHAR(255) NOT NULL,
+                universe_id      VARCHAR(100) NOT NULL,
+                api_key          VARCHAR(255) NOT NULL,
+                topic            VARCHAR(255) DEFAULT 'ArchieDonationIDR',
+                webhook_secret   VARCHAR(255) NOT NULL UNIQUE,
+                saweria_token    VARCHAR(255),
+                socialbuzz_token VARCHAR(255),
+                created_at       TIMESTAMPTZ  DEFAULT NOW()
+            )
+        `);
+        console.log('✅ Table games ready');
+
+        // ─── game_passwords ───────────────────────────────────────────────────
         await client.query(`
             CREATE TABLE IF NOT EXISTS game_passwords (
                 game_id     VARCHAR(50)  PRIMARY KEY,
@@ -17,7 +33,7 @@ async function migrate() {
         `);
         console.log('✅ Table game_passwords ready');
 
-        // ─── donations ────────────────────────────────────────────────────
+        // ─── donations ────────────────────────────────────────────────────────
         await client.query(`
             CREATE TABLE IF NOT EXISTS donations (
                 id           SERIAL       PRIMARY KEY,
@@ -33,19 +49,9 @@ async function migrate() {
         `);
         console.log('✅ Table donations ready');
 
-        // Indexes for faster lookups
-        await client.query(`
-            CREATE INDEX IF NOT EXISTS idx_donations_game_id
-                ON donations(game_id)
-        `);
-        await client.query(`
-            CREATE INDEX IF NOT EXISTS idx_donations_game_donated
-                ON donations(game_id, donated_at DESC)
-        `);
-        await client.query(`
-            CREATE INDEX IF NOT EXISTS idx_donations_username
-                ON donations(game_id, username)
-        `);
+        await client.query(`CREATE INDEX IF NOT EXISTS idx_donations_game_id      ON donations(game_id)`);
+        await client.query(`CREATE INDEX IF NOT EXISTS idx_donations_game_donated  ON donations(game_id, donated_at DESC)`);
+        await client.query(`CREATE INDEX IF NOT EXISTS idx_donations_username      ON donations(game_id, username)`);
         console.log('✅ Indexes ready');
 
         await client.query('COMMIT');
