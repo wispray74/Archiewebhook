@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dashboard</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#0a0e27;color:#fff;min-height:100vh;padding:20px}
+.container{max-width:1100px;margin:0 auto}
+.header{background:linear-gradient(135deg,rgba(139,92,246,.2),rgba(59,130,246,.2));border:1px solid rgba(139,92,246,.3);border-radius:20px;padding:28px 32px;margin-bottom:28px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px}
+.header h1{font-size:28px;background:linear-gradient(135deg,#8b5cf6,#3b82f6);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.header p{color:#94a3b8;font-size:13px;margin-top:4px}
+.hbtns{display:flex;gap:10px;flex-wrap:wrap}
+.nav{display:flex;gap:10px;margin-bottom:24px;border-bottom:1px solid rgba(139,92,246,.15)}
+.ntab{padding:10px 20px;background:none;border:none;border-bottom:2px solid transparent;color:#94a3b8;font-size:14px;font-weight:600;cursor:pointer;transition:all .3s;border-radius:8px 8px 0 0}
+.ntab.active{color:#8b5cf6;border-bottom-color:#8b5cf6;background:rgba(139,92,246,.1)}
+.page{display:none}.page.active{display:block}
+.card{background:rgba(15,23,42,.8);border:1px solid rgba(139,92,246,.2);border-radius:16px;padding:24px;margin-bottom:20px}
+.card h3{color:#8b5cf6;font-size:17px;margin-bottom:18px}
+.sgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:20px}
+.scard{background:rgba(15,23,42,.8);border:1px solid rgba(139,92,246,.2);border-radius:14px;padding:20px;text-align:center}
+.sv{font-size:30px;font-weight:700;background:linear-gradient(135deg,#8b5cf6,#3b82f6);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:6px}
+.sl{color:#94a3b8;font-size:12px;text-transform:uppercase;letter-spacing:.5px}
+.ir{display:flex;justify-content:space-between;padding:11px 0;border-bottom:1px solid rgba(139,92,246,.08);font-size:14px}
+.ir:last-child{border:none}
+.il{color:#94a3b8}.iv{color:#fff;font-weight:500}
+.ub{background:rgba(0,0,0,.3);border:1px solid rgba(139,92,246,.2);border-radius:10px;padding:14px;margin:10px 0}
+.ulb{color:#8b5cf6;font-size:12px;font-weight:600;text-transform:uppercase;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center}
+.ut{color:#10b981;font-family:monospace;font-size:12px;word-break:break-all;padding:10px;background:rgba(0,0,0,.4);border-radius:6px}
+.btn{padding:9px 18px;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;transition:all .3s;display:inline-flex;align-items:center;gap:5px;background:linear-gradient(135deg,#8b5cf6,#3b82f6);color:#fff}
+.btn:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(139,92,246,.4)}
+.btn-sm{padding:6px 14px;font-size:12px}
+.btn-sec{background:rgba(139,92,246,.2);border:1px solid rgba(139,92,246,.4)}
+.badge{display:inline-block;padding:3px 10px;border-radius:10px;font-size:12px;font-weight:600}
+.bs{background:rgba(16,185,129,.15);color:#10b981;border:1px solid rgba(16,185,129,.3)}
+.bw{background:rgba(245,158,11,.15);color:#f59e0b;border:1px solid rgba(245,158,11,.3)}
+.bp{background:rgba(139,92,246,.15);color:#8b5cf6;border:1px solid rgba(139,92,246,.3)}
+.tbl-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13px}
+thead{background:rgba(139,92,246,.1)}
+th{padding:12px 14px;text-align:left;color:#8b5cf6;font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.4px}
+td{padding:12px 14px;color:#cbd5e1;border-bottom:1px solid rgba(139,92,246,.08)}
+tr:last-child td{border:none}
+tr:hover td{background:rgba(139,92,246,.04)}
+.sbar{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap}
+.sbar input{flex:1;min-width:180px;padding:10px 14px;background:rgba(15,23,42,.6);border:1.5px solid rgba(139,92,246,.2);border-radius:8px;color:#fff;font-size:13px;outline:none}
+.sbar input:focus{border-color:#8b5cf6}
+.pag{display:flex;justify-content:center;align-items:center;gap:8px;margin-top:16px;font-size:13px;color:#94a3b8}
+.chart{display:flex;align-items:flex-end;gap:6px;height:80px;margin-top:8px}
+.bar-wrap{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px}
+.bar{width:100%;background:linear-gradient(to top,#8b5cf6,#3b82f6);border-radius:4px 4px 0 0;min-height:2px}
+.bar-label{color:#64748b;font-size:10px;text-align:center}
+.modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1000;justify-content:center;align-items:center;padding:20px}
+.modal.active{display:flex}
+.mc{background:rgba(15,23,42,.95);border:1px solid rgba(139,92,246,.3);border-radius:20px;padding:32px;max-width:480px;width:100%}
+.mh{display:flex;justify-content:space-between;align-items:center;margin-bottom:22px}
+.mh h2{color:#8b5cf6;font-size:22px}
+.xbtn{background:none;border:none;color:#94a3b8;font-size:22px;cursor:pointer;line-height:1}
+.fg{margin-bottom:18px}
+.fg label{display:block;color:#cbd5e1;font-size:14px;font-weight:500;margin-bottom:7px}
+.fg input{width:100%;padding:11px 14px;background:rgba(15,23,42,.6);border:2px solid rgba(139,92,246,.2);border-radius:9px;color:#fff;font-size:14px;outline:none}
+.fg input:focus{border-color:#8b5cf6}
+.mf{display:flex;gap:10px;justify-content:flex-end;margin-top:20px}
+.toast{position:fixed;top:20px;right:20px;padding:14px 22px;border-radius:12px;font-weight:600;display:none;z-index:2000;max-width:340px}
+.tok{background:rgba(16,185,129,.9);color:#fff}
+.terr{background:rgba(239,68,68,.9);color:#fff}
+</style>
+</head>
+<body>
+<div class="toast tok" id="tOk"></div>
+<div class="toast terr" id="tErr"></div>
+
+<div class="modal" id="cpModal">
+  <div class="mc">
+    <div class="mh"><h2>Ganti Password</h2><button class="xbtn" id="cpClose">&#x2715;</button></div>
+    <div class="fg"><label>Password Saat Ini</label><input type="password" id="cpCur"></div>
+    <div class="fg"><label>Password Baru</label><input type="password" id="cpNew"></div>
+    <div class="fg"><label>Konfirmasi Baru</label><input type="password" id="cpCon"></div>
+    <div class="mf">
+      <button class="btn btn-sec" id="cpCancel">Batal</button>
+      <button class="btn" id="cpSave">Simpan</button>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+  <div class="header">
+    <div><h1 id="hTitle">Dashboard</h1><p>Webhook Integration Dashboard</p></div>
+    <div class="hbtns">
+      <button class="btn btn-sec" id="btnPwd">&#x1F511; Ganti Password</button>
+      <button class="btn btn-sec" id="btnOut">&#x1F6AA; Logout</button>
+    </div>
+  </div>
+  <div class="nav">
+    <button class="ntab active" id="tab-overview">&#x1F4CA; Overview</button>
+    <button class="ntab" id="tab-history">&#x1F4DC; History</button>
+    <button class="ntab" id="tab-leaderboard">&#x1F3C6; Leaderboard</button>
+    <button class="ntab" id="tab-settings">&#x2699;&#xFE0F; Settings</button>
+  </div>
+
+  <div class="page active" id="p-overview">
+    <div class="sgrid">
+      <div class="scard"><div class="sv" id="sTotalAmount">-</div><div class="sl">Total Donasi</div></div>
+      <div class="scard"><div class="sv" id="sTotalCount">-</div><div class="sl">Transaksi</div></div>
+      <div class="scard"><div class="sv" id="sUniqueDonors">-</div><div class="sl">Donatur Unik</div></div>
+    </div>
+    <div class="card"><h3>&#x1F4C8; 7 Hari Terakhir</h3><div class="chart" id="weekChart"><p style="color:#64748b">Memuat...</p></div></div>
+    <div class="card"><h3>&#x1F3AE; Info Game</h3><div id="gameInfo"></div></div>
+  </div>
+
+  <div class="page" id="p-history">
+    <div class="card"><h3>&#x1F4DC; History Donasi</h3>
+      <div class="sbar">
+        <input type="text" id="searchInput" placeholder="Cari username...">
+        <button class="btn btn-sm" id="btnCari">Cari</button>
+        <button class="btn btn-sm btn-sec" id="btnExport">&#x2B07; Export CSV</button>
+      </div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>#</th><th>Waktu</th><th>Username</th><th>Nama</th><th>Platform</th><th>Jumlah</th><th>Pesan</th></tr></thead>
+          <tbody id="donTbody"><tr><td colspan="7" style="text-align:center;padding:24px;color:#64748b">Memuat...</td></tr></tbody>
+        </table>
+      </div>
+      <div class="pag" id="pagination"></div>
+    </div>
+  </div>
+
+  <div class="page" id="p-leaderboard">
+    <div class="card"><h3>&#x1F3C6; Top Donatur</h3>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Rank</th><th>Username</th><th>Nama</th><th>Donasi</th><th>Total</th><th>Terakhir</th></tr></thead>
+          <tbody id="lbTbody"><tr><td colspan="6" style="text-align:center;padding:24px;color:#64748b">Klik tab Leaderboard</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="page" id="p-settings">
+    <div class="card"><h3>&#x1F517; Webhook URLs</h3>
+      <div class="ub"><div class="ulb"><span>Saweria</span><button class="btn btn-sm" id="cpySaw">Copy</button></div><div class="ut" id="sawURL">-</div></div>
+      <div class="ub"><div class="ulb"><span>SocialBuzz</span><button class="btn btn-sm" id="cpySb">Copy</button></div><div class="ut" id="sbURL">-</div></div>
+      <div class="ub"><div class="ulb"><span>Test URL</span><button class="btn btn-sm" id="cpyTest">Copy</button></div><div class="ut" id="testURL">-</div></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  // Get password from URL
+  var pwd = new URLSearchParams(location.search).get('password') || '';
+  if (!pwd) { location.href = '/'; return; }
+
+  var G = null;
+  var donPage = 0, donTotal = 0, donLimit = 50, searchTimer = null;
+
+  // Load config from server
+  fetch('/api/user/config?password=' + encodeURIComponent(pwd))
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (!d.success) { location.href = '/'; return; }
+      G = d;
+      // Set UI
+      document.getElementById('hTitle').textContent = G.name;
+      document.getElementById('gameInfo').innerHTML =
+        '<div class="ir"><span class="il">Universe ID</span><span class="iv">' + esc(G.uid) + '</span></div>' +
+        '<div class="ir"><span class="il">Topic</span><span class="iv">' + esc(G.topic) + '</span></div>' +
+        '<div class="ir"><span class="il">Saweria</span><span class="iv"><span class="badge ' + (G.hasSaw ? 'bs' : 'bw') + '">' + (G.hasSaw ? 'Set' : 'Optional') + '</span></span></div>' +
+        '<div class="ir"><span class="il">SocialBuzz</span><span class="iv"><span class="badge ' + (G.hasSb ? 'bs' : 'bw') + '">' + (G.hasSb ? 'Set' : 'Optional') + '</span></span></div>';
+      document.getElementById('sawURL').textContent  = G.sawUrl;
+      document.getElementById('sbURL').textContent   = G.sbUrl;
+      document.getElementById('testURL').textContent = G.testUrl + '?password=' + encodeURIComponent(pwd);
+      document.title = G.name + ' - Dashboard';
+      loadStats();
+    })
+    .catch(function() { location.href = '/'; });
+
+  // Tab navigation
+  ['overview', 'history', 'leaderboard', 'settings'].forEach(function(id) {
+    document.getElementById('tab-' + id).addEventListener('click', function() {
+      ['overview', 'history', 'leaderboard', 'settings'].forEach(function(x) {
+        document.getElementById('tab-' + x).classList.remove('active');
+        document.getElementById('p-' + x).classList.remove('active');
+      });
+      document.getElementById('tab-' + id).classList.add('active');
+      document.getElementById('p-' + id).classList.add('active');
+      if (id === 'history')     loadDonations(0);
+      if (id === 'leaderboard') loadLeaderboard();
+    });
+  });
+
+  // Button events
+  document.getElementById('btnPwd').addEventListener('click', function() { document.getElementById('cpModal').classList.add('active'); });
+  document.getElementById('btnOut').addEventListener('click', function() { location.href = '/'; });
+  document.getElementById('cpClose').addEventListener('click', closeModal);
+  document.getElementById('cpCancel').addEventListener('click', closeModal);
+  document.getElementById('cpModal').addEventListener('click', function(e) { if (e.target.id === 'cpModal') closeModal(); });
+  document.getElementById('cpSave').addEventListener('click', doChangePwd);
+  document.getElementById('btnCari').addEventListener('click', function() { loadDonations(0); });
+  document.getElementById('btnExport').addEventListener('click', exportCSV);
+  document.getElementById('searchInput').addEventListener('input', function() {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(function() { loadDonations(0); }, 400);
+  });
+  document.getElementById('cpySaw').addEventListener('click', function() { copyUrl('sawURL'); });
+  document.getElementById('cpySb').addEventListener('click', function() { copyUrl('sbURL'); });
+  document.getElementById('cpyTest').addEventListener('click', function() { copyUrl('testURL'); });
+
+  // Utils
+  function esc(s) {
+    return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+  function fmt(n) {
+    return new Intl.NumberFormat('id-ID', {style:'currency', currency:'IDR', minimumFractionDigits:0}).format(n);
+  }
+  function fmtDate(s) {
+    return new Date(s).toLocaleString('id-ID', {dateStyle:'short', timeStyle:'short'});
+  }
+  function showToast(msg, ok) {
+    var el = document.getElementById(ok ? 'tOk' : 'tErr');
+    el.textContent = msg;
+    el.style.display = 'block';
+    setTimeout(function() { el.style.display = 'none'; }, 3500);
+  }
+  function copyUrl(id) {
+    navigator.clipboard.writeText(document.getElementById(id).textContent)
+      .then(function() { showToast('URL disalin!', true); })
+      .catch(function() { showToast('Gagal copy', false); });
+  }
+  function srcBadge(s) {
+    var c = {Saweria:'bs', SocialBuzz:'bp', Test:'bw'};
+    return '<span class="badge ' + (c[s] || 'bw') + '">' + esc(s || '?') + '</span>';
+  }
+  function closeModal() {
+    document.getElementById('cpModal').classList.remove('active');
+  }
+
+  function doChangePwd() {
+    var cur = document.getElementById('cpCur').value;
+    var nw  = document.getElementById('cpNew').value;
+    var con = document.getElementById('cpCon').value;
+    if (nw !== con)    return showToast('Password baru tidak cocok', false);
+    if (nw.length < 6) return showToast('Minimal 6 karakter', false);
+    fetch('/api/user/change-password', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({currentPassword: cur, newPassword: nw})
+    }).then(function(r) { return r.json(); }).then(function(d) {
+      if (d.success) {
+        showToast('Berhasil!', true);
+        closeModal();
+        setTimeout(function() { location.href = '/dashboard?password=' + encodeURIComponent(nw); }, 1500);
+      } else {
+        showToast(d.error || 'Gagal', false);
+      }
+    }).catch(function() { showToast('Connection error', false); });
+  }
+
+  function loadStats() {
+    fetch('/api/user/donations/stats?password=' + encodeURIComponent(pwd))
+      .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(function(d) {
+        if (!d.success) throw new Error(d.error || 'Error');
+        document.getElementById('sTotalAmount').textContent  = fmt(d.totals.total_amount || 0);
+        document.getElementById('sTotalCount').textContent   = Number(d.totals.total_donations || 0).toLocaleString();
+        document.getElementById('sUniqueDonors').textContent = Number(d.totals.unique_donors || 0).toLocaleString();
+        var days = d.recent7 || [];
+        if (!days.length) {
+          document.getElementById('weekChart').innerHTML = '<p style="color:#64748b;font-size:13px">Belum ada data minggu ini</p>';
+          return;
+        }
+        var max = Math.max.apply(null, days.map(function(x) { return parseInt(x.amount) || 0; }).concat([1]));
+        document.getElementById('weekChart').innerHTML = days.map(function(day) {
+          var pct = Math.max(4, Math.round((parseInt(day.amount) || 0) / max * 100));
+          var lbl = new Date(day.day).toLocaleDateString('id-ID', {weekday:'short', day:'numeric'});
+          return '<div class="bar-wrap"><div class="bar" style="height:' + pct + '%" title="' + fmt(day.amount) + '"></div><div class="bar-label">' + lbl + '</div></div>';
+        }).join('');
+      }).catch(function(e) {
+        document.getElementById('sTotalAmount').textContent = 'Error';
+        document.getElementById('weekChart').innerHTML = '<p style="color:#ef4444;font-size:13px">Gagal: ' + e.message + '</p>';
+      });
+  }
+
+  function loadDonations(offset) {
+    if (offset === undefined) offset = 0;
+    donPage = offset;
+    var search = document.getElementById('searchInput').value.trim();
+    var tbody  = document.getElementById('donTbody');
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px;color:#64748b">Memuat...</td></tr>';
+    fetch('/api/user/donations?password=' + encodeURIComponent(pwd) + '&limit=' + donLimit + '&offset=' + offset + '&search=' + encodeURIComponent(search))
+      .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(function(d) {
+        if (!d.success) {
+          tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#ef4444">' + esc(d.error) + '</td></tr>';
+          return;
+        }
+        donTotal = d.total;
+        if (!d.donations.length) {
+          tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:30px;color:#64748b">Belum ada donasi</td></tr>';
+          renderPag();
+          return;
+        }
+        tbody.innerHTML = d.donations.map(function(don, i) {
+          return '<tr>' +
+            '<td style="color:#64748b">' + (offset + i + 1) + '</td>' +
+            '<td style="white-space:nowrap">' + fmtDate(don.donated_at) + '</td>' +
+            '<td><strong style="color:#10b981">' + esc(don.username || '') + '</strong></td>' +
+            '<td style="color:#94a3b8">' + esc(don.display_name || '-') + '</td>' +
+            '<td>' + srcBadge(don.source) + '</td>' +
+            '<td><strong>' + fmt(don.amount) + '</strong></td>' +
+            '<td style="color:#94a3b8;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(don.message || '-') + '</td>' +
+            '</tr>';
+        }).join('');
+        renderPag();
+      }).catch(function(e) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#ef4444">Error: ' + e.message + '</td></tr>';
+      });
+  }
+
+  function renderPag() {
+    var pages = Math.ceil(donTotal / donLimit);
+    var cur   = Math.floor(donPage / donLimit);
+    var el    = document.getElementById('pagination');
+    if (pages <= 1) { el.innerHTML = ''; return; }
+    el.innerHTML =
+      '<button class="btn btn-sm btn-sec" id="pagPrev"' + (cur === 0 ? ' disabled' : '') + '>Prev</button>' +
+      '<span>' + (cur + 1) + ' / ' + pages + ' (' + donTotal + ')</span>' +
+      '<button class="btn btn-sm btn-sec" id="pagNext"' + (cur >= pages - 1 ? ' disabled' : '') + '>Next</button>';
+    if (cur > 0)         document.getElementById('pagPrev').addEventListener('click', function() { loadDonations((cur - 1) * donLimit); });
+    if (cur < pages - 1) document.getElementById('pagNext').addEventListener('click', function() { loadDonations((cur + 1) * donLimit); });
+  }
+
+  function loadLeaderboard() {
+    var tbody = document.getElementById('lbTbody');
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:#64748b">Memuat...</td></tr>';
+    fetch('/api/user/donations/stats?password=' + encodeURIComponent(pwd))
+      .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(function(d) {
+        if (!d.success || !d.byUser || !d.byUser.length) {
+          tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:30px;color:#64748b">Belum ada data</td></tr>';
+          return;
+        }
+        var med = ['\uD83E\uDD47', '\uD83E\uDD48', '\uD83E\uDD49'];
+        tbody.innerHTML = d.byUser.map(function(u, i) {
+          return '<tr>' +
+            '<td><strong>' + (med[i] || '#' + (i + 1)) + '</strong></td>' +
+            '<td><strong style="color:#10b981">' + esc(u.username) + '</strong></td>' +
+            '<td style="color:#94a3b8">' + esc(u.display_name || '-') + '</td>' +
+            '<td><span class="badge bp">' + u.donation_count + 'x</span></td>' +
+            '<td><strong style="color:#f59e0b">' + fmt(u.total_amount) + '</strong></td>' +
+            '<td style="color:#64748b;font-size:12px">' + fmtDate(u.last_donation) + '</td>' +
+            '</tr>';
+        }).join('');
+      }).catch(function(e) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#ef4444">Error: ' + e.message + '</td></tr>';
+      });
+  }
+
+  function exportCSV() {
+    showToast('Mengambil data...', true);
+    fetch('/api/user/donations?password=' + encodeURIComponent(pwd) + '&limit=5000&offset=0')
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        if (!d.success) { showToast('Gagal', false); return; }
+        var rows = d.donations.map(function(x, i) {
+          return [i + 1, new Date(x.donated_at).toISOString(), x.username, x.display_name, x.source, x.amount, (x.message || '').replace(/,/g, ' ')].join(',');
+        });
+        var csv = ['No,Waktu,Username,Nama,Platform,Jumlah,Pesan'].concat(rows).join('\n');
+        var a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob([csv], {type: 'text/csv'}));
+        a.download = 'donasi_' + Date.now() + '.csv';
+        a.click();
+        showToast('Export berhasil!', true);
+      }).catch(function() { showToast('Gagal export', false); });
+  }
+
+})();
+</script>
+</body>
+</html>
