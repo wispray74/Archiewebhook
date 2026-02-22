@@ -1,11 +1,12 @@
 {
-  "name": "Archie-feature-webhook",
-  "version": "2.0.0",
+  "name": "archie-feature-webhook",
+  "version": "3.0.0",
   "description": "Multi-feature webhook system with PostgreSQL database",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "migrate": "node migrate.js"
+    "migrate": "node migrate.js",
+    "setup": "node migrate.js && node server.js"
   },
   "dependencies": {
     "express": "^4.18.2",
