@@ -11,16 +11,24 @@ async function migrate() {
         await client.query(`
             CREATE TABLE IF NOT EXISTS games (
                 id               VARCHAR(50)  PRIMARY KEY,
-                name             VARCHAR(255) NOT NULL,
-                universe_id      VARCHAR(100) NOT NULL,
-                api_key          VARCHAR(255) NOT NULL,
-                topic            VARCHAR(255) DEFAULT 'ArchieDonationIDR',
-                webhook_secret   VARCHAR(255) NOT NULL UNIQUE,
-                saweria_token    VARCHAR(255),
-                socialbuzz_token VARCHAR(255),
+                name             TEXT         NOT NULL,
+                universe_id      TEXT         NOT NULL,
+                api_key          TEXT         NOT NULL,
+                topic            TEXT         DEFAULT 'ArchieDonationIDR',
+                webhook_secret   TEXT         NOT NULL UNIQUE,
+                saweria_token    TEXT,
+                socialbuzz_token TEXT,
                 created_at       TIMESTAMPTZ  DEFAULT NOW()
             )
         `);
+        // Alter existing columns if already created with VARCHAR(255)
+        await client.query(`ALTER TABLE games ALTER COLUMN name             TYPE TEXT`).catch(()=>{});
+        await client.query(`ALTER TABLE games ALTER COLUMN universe_id      TYPE TEXT`).catch(()=>{});
+        await client.query(`ALTER TABLE games ALTER COLUMN api_key          TYPE TEXT`).catch(()=>{});
+        await client.query(`ALTER TABLE games ALTER COLUMN topic            TYPE TEXT`).catch(()=>{});
+        await client.query(`ALTER TABLE games ALTER COLUMN webhook_secret   TYPE TEXT`).catch(()=>{});
+        await client.query(`ALTER TABLE games ALTER COLUMN saweria_token    TYPE TEXT`).catch(()=>{});
+        await client.query(`ALTER TABLE games ALTER COLUMN socialbuzz_token TYPE TEXT`).catch(()=>{});
         console.log('✅ Table games ready');
 
         // ─── game_passwords ───────────────────────────────────────────────────
