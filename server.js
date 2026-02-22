@@ -630,6 +630,7 @@ app.get('/', (_req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 //  User Dashboard
 // ─────────────────────────────────────────────────────────────────────────────
 app.get('/dashboard', async (req, res) => {
@@ -638,11 +639,14 @@ app.get('/dashboard', async (req, res) => {
     if (!game) return res.redirect('/');
     const baseUrl = `https://${req.get('host')}`;
 
+    // Escape semua nilai game untuk aman di template literal HTML
+    const esc = (s) => String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
     res.send(`<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>${game.name} — Dashboard</title>
+  <title>${esc(game.name)} — Dashboard</title>
   <style>
     *{margin:0;padding:0;box-sizing:border-box}
     body{font-family:'Segoe UI',system-ui,sans-serif;background:#0a0e27;color:#fff;min-height:100vh;padding:20px}
@@ -651,13 +655,13 @@ app.get('/dashboard', async (req, res) => {
     .header h1{font-size:28px;background:linear-gradient(135deg,#8b5cf6,#3b82f6);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
     .header p{color:#94a3b8;font-size:13px;margin-top:4px}
     .hbtns{display:flex;gap:10px;flex-wrap:wrap}
-    .nav{display:flex;gap:10px;margin-bottom:24px;border-bottom:1px solid rgba(139,92,246,.15);padding-bottom:0}
+    .nav{display:flex;gap:10px;margin-bottom:24px;border-bottom:1px solid rgba(139,92,246,.15)}
     .ntab{padding:10px 20px;background:none;border:none;border-bottom:2px solid transparent;color:#94a3b8;font-size:14px;font-weight:600;cursor:pointer;transition:all .3s;border-radius:8px 8px 0 0}
     .ntab.active{color:#8b5cf6;border-bottom-color:#8b5cf6;background:rgba(139,92,246,.1)}
     .ntab:hover{color:#8b5cf6}
     .page{display:none}.page.active{display:block}
     .card{background:rgba(15,23,42,.8);border:1px solid rgba(139,92,246,.2);border-radius:16px;padding:24px;margin-bottom:20px;backdrop-filter:blur(10px)}
-    .card h3{color:#8b5cf6;font-size:17px;margin-bottom:18px;display:flex;align-items:center;gap:8px}
+    .card h3{color:#8b5cf6;font-size:17px;margin-bottom:18px}
     .sgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:20px}
     .scard{background:rgba(15,23,42,.8);border:1px solid rgba(139,92,246,.2);border-radius:14px;padding:20px;text-align:center}
     .scard .sv{font-size:30px;font-weight:700;background:linear-gradient(135deg,#8b5cf6,#3b82f6);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:6px}
@@ -688,7 +692,6 @@ app.get('/dashboard', async (req, res) => {
     .sbar input{flex:1;min-width:180px;padding:10px 14px;background:rgba(15,23,42,.6);border:1.5px solid rgba(139,92,246,.2);border-radius:8px;color:#fff;font-size:13px;outline:none}
     .sbar input:focus{border-color:#8b5cf6}
     .pag{display:flex;justify-content:center;align-items:center;gap:8px;margin-top:16px;font-size:13px}
-    .pag button{padding:6px 14px;font-size:12px}
     .pag span{color:#94a3b8}
     .chart{display:flex;align-items:flex-end;gap:6px;height:80px;margin-top:8px}
     .bar-wrap{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px}
@@ -700,17 +703,18 @@ app.get('/dashboard', async (req, res) => {
     @keyframes mfade{from{opacity:0;transform:scale(.9)}to{opacity:1;transform:scale(1)}}
     .mh{display:flex;justify-content:space-between;align-items:center;margin-bottom:22px}
     .mh h2{color:#8b5cf6;font-size:22px}
-    .xbtn{background:none;border:none;color:#94a3b8;font-size:22px;cursor:pointer;width:30px;height:30px;display:flex;align-items:center;justify-content:center;border-radius:6px;transition:all .3s}
+    .xbtn{background:none;border:none;color:#94a3b8;font-size:22px;cursor:pointer;width:30px;height:30px;display:flex;align-items:center;justify-content:center;border-radius:6px}
     .xbtn:hover{background:rgba(139,92,246,.2);color:#8b5cf6}
     .fg{margin-bottom:18px}
     .fg label{display:block;color:#cbd5e1;font-size:14px;font-weight:500;margin-bottom:7px}
-    .fg input{width:100%;padding:11px 14px;background:rgba(15,23,42,.6);border:2px solid rgba(139,92,246,.2);border-radius:9px;color:#fff;font-size:14px;outline:none;transition:all .3s}
+    .fg input{width:100%;padding:11px 14px;background:rgba(15,23,42,.6);border:2px solid rgba(139,92,246,.2);border-radius:9px;color:#fff;font-size:14px;outline:none;transition:border-color .3s}
     .fg input:focus{border-color:#8b5cf6}
     .mf{display:flex;gap:10px;justify-content:flex-end;margin-top:20px}
-    .toast{position:fixed;top:20px;right:20px;padding:14px 22px;border-radius:12px;font-weight:600;display:none;z-index:2000;animation:slideIn .3s}
-    @keyframes slideIn{from{transform:translateX(400px);opacity:0}to{transform:translateX(0);opacity:1}}
+    .toast{position:fixed;top:20px;right:20px;padding:14px 22px;border-radius:12px;font-weight:600;display:none;z-index:2000;max-width:340px}
     .tOk{background:rgba(16,185,129,.9);color:#fff}
     .tErr{background:rgba(239,68,68,.9);color:#fff}
+    .err-box{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:10px;padding:16px;text-align:center;color:#fca5a5;font-size:13px}
+    .err-box button{margin-top:10px;padding:7px 16px;background:rgba(239,68,68,.2);border:1px solid rgba(239,68,68,.4);border-radius:8px;color:#fca5a5;cursor:pointer;font-size:12px}
     @media(max-width:600px){.header{padding:20px;flex-direction:column}.card{padding:16px}}
   </style>
 </head>
@@ -720,48 +724,52 @@ app.get('/dashboard', async (req, res) => {
 
 <div class="modal" id="cpModal">
   <div class="mc">
-    <div class="mh"><h2>🔐 Ganti Password</h2><button class="xbtn" onclick="closeModal()">×</button></div>
-    <form id="cpForm">
-      <div class="fg"><label>Password Saat Ini</label><input type="password" id="cpCur" required></div>
-      <div class="fg"><label>Password Baru</label><input type="password" id="cpNew" minlength="6" required></div>
-      <div class="fg"><label>Konfirmasi Password Baru</label><input type="password" id="cpCon" minlength="6" required></div>
-      <div class="mf">
-        <button type="button" class="btn btn-sec" onclick="closeModal()">Batal</button>
-        <button type="submit" class="btn">Simpan</button>
-      </div>
-    </form>
+    <div class="mh"><h2>🔐 Ganti Password</h2><button class="xbtn" onclick="closeCpModal()">×</button></div>
+    <div class="fg"><label>Password Saat Ini</label><input type="password" id="cpCur"></div>
+    <div class="fg"><label>Password Baru</label><input type="password" id="cpNew" minlength="6"></div>
+    <div class="fg"><label>Konfirmasi Password Baru</label><input type="password" id="cpCon" minlength="6"></div>
+    <div class="mf">
+      <button class="btn btn-sec" onclick="closeCpModal()">Batal</button>
+      <button class="btn" onclick="submitChangePwd()">Simpan</button>
+    </div>
   </div>
 </div>
 
 <div class="container">
   <div class="header">
-    <div><h1>🎮 ${game.name}</h1><p>Webhook Integration Dashboard</p></div>
+    <div><h1>🎮 ${esc(game.name)}</h1><p>Webhook Integration Dashboard</p></div>
     <div class="hbtns">
       <button class="btn btn-sec" onclick="document.getElementById('cpModal').classList.add('active')">🔑 Ganti Password</button>
       <button class="btn btn-sec" onclick="location.href='/'">🚪 Logout</button>
     </div>
   </div>
   <div class="nav">
-    <button class="ntab active" onclick="switchPage('overview')">📊 Overview</button>
-    <button class="ntab" onclick="switchPage('history')">📜 History Donasi</button>
-    <button class="ntab" onclick="switchPage('leaderboard')">🏆 Leaderboard</button>
-    <button class="ntab" onclick="switchPage('settings')">⚙️ Settings</button>
+    <button class="ntab active" id="tab-overview" onclick="switchPage('overview')">📊 Overview</button>
+    <button class="ntab" id="tab-history" onclick="switchPage('history')">📜 History</button>
+    <button class="ntab" id="tab-leaderboard" onclick="switchPage('leaderboard')">🏆 Leaderboard</button>
+    <button class="ntab" id="tab-settings" onclick="switchPage('settings')">⚙️ Settings</button>
   </div>
+
   <div class="page active" id="p-overview">
-    <div class="sgrid" id="statCards">
+    <div class="sgrid">
       <div class="scard"><div class="sv" id="sTotalAmount">—</div><div class="sl">Total Donasi</div></div>
-      <div class="scard"><div class="sv" id="sTotalCount">—</div><div class="sl">Jumlah Transaksi</div></div>
+      <div class="scard"><div class="sv" id="sTotalCount">—</div><div class="sl">Transaksi</div></div>
       <div class="scard"><div class="sv" id="sUniqueDonors">—</div><div class="sl">Donatur Unik</div></div>
     </div>
-    <div class="card"><h3>📈 Donasi 7 Hari Terakhir</h3><div class="chart" id="weekChart"><p style="color:#64748b;font-size:13px">Loading…</p></div></div>
+    <div id="statsErr" style="display:none" class="err-box">
+      ❌ Gagal memuat statistik.<br><span id="statsErrMsg"></span>
+      <br><button onclick="loadStats()">↻ Coba Lagi</button>
+    </div>
+    <div class="card"><h3>📈 7 Hari Terakhir</h3><div class="chart" id="weekChart"><p style="color:#64748b;font-size:13px">Memuat…</p></div></div>
     <div class="card">
-      <h3>📋 Informasi Game</h3>
-      <div class="ir"><span class="il">Universe ID</span><span class="iv">${game.universeId}</span></div>
-      <div class="ir"><span class="il">Topic</span><span class="iv">${game.topic}</span></div>
+      <h3>📋 Info Game</h3>
+      <div class="ir"><span class="il">Universe ID</span><span class="iv">${esc(game.universeId)}</span></div>
+      <div class="ir"><span class="il">Topic</span><span class="iv">${esc(game.topic)}</span></div>
       <div class="ir"><span class="il">Saweria Token</span><span class="iv"><span class="badge ${game.saweriaToken ? 'bs' : 'bw'}">${game.saweriaToken ? '✓ Set' : '⚠ Optional'}</span></span></div>
       <div class="ir"><span class="il">SocialBuzz Token</span><span class="iv"><span class="badge ${game.socialbuzzToken ? 'bs' : 'bw'}">${game.socialbuzzToken ? '✓ Set' : '⚠ Optional'}</span></span></div>
     </div>
   </div>
+
   <div class="page" id="p-history">
     <div class="card">
       <h3>📜 History Donasi</h3>
@@ -770,68 +778,296 @@ app.get('/dashboard', async (req, res) => {
         <button class="btn btn-sm" onclick="loadDonations(0)">Cari</button>
         <button class="btn btn-sm btn-sec" onclick="exportCSV()">⬇ Export CSV</button>
       </div>
+      <div id="donErr" style="display:none" class="err-box">❌ <span id="donErrMsg"></span><br><button onclick="loadDonations(0)">↻ Coba Lagi</button></div>
       <div class="tbl-wrap">
         <table>
           <thead><tr><th>#</th><th>Waktu</th><th>Username</th><th>Nama</th><th>Platform</th><th>Jumlah</th><th>Pesan</th></tr></thead>
-          <tbody id="donTbody"><tr><td colspan="7" style="text-align:center;padding:30px;color:#64748b">Loading…</td></tr></tbody>
+          <tbody id="donTbody"></tbody>
         </table>
       </div>
       <div class="pag" id="pagination"></div>
     </div>
   </div>
+
   <div class="page" id="p-leaderboard">
     <div class="card">
       <h3>🏆 Top Donatur</h3>
+      <div id="lbErr" style="display:none" class="err-box">❌ <span id="lbErrMsg"></span><br><button onclick="loadLeaderboard()">↻ Coba Lagi</button></div>
       <div class="tbl-wrap">
         <table>
-          <thead><tr><th>Rank</th><th>Username</th><th>Nama</th><th>Jumlah Donasi</th><th>Total Amount</th><th>Terakhir Donasi</th></tr></thead>
-          <tbody id="lbTbody"><tr><td colspan="6" style="text-align:center;padding:30px;color:#64748b">Loading…</td></tr></tbody>
+          <thead><tr><th>Rank</th><th>Username</th><th>Nama</th><th>Jumlah Donasi</th><th>Total</th><th>Terakhir</th></tr></thead>
+          <tbody id="lbTbody"></tbody>
         </table>
       </div>
     </div>
   </div>
+
   <div class="page" id="p-settings">
     <div class="card">
       <h3>🔗 Webhook URLs</h3>
-      <p style="color:#94a3b8;font-size:13px;margin-bottom:18px">Gunakan URL berikut di Saweria / SocialBuzz.</p>
-      <div class="ub"><div class="ul"><span>📡 Saweria Webhook</span><button class="btn btn-sm" onclick="copy('sawURL')">📋 Copy</button></div><div class="ut" id="sawURL">${baseUrl}/${game.webhookSecret}/saweria</div></div>
-      <div class="ub"><div class="ul"><span>📡 SocialBuzz Webhook</span><button class="btn btn-sm" onclick="copy('sbURL')">📋 Copy</button></div><div class="ut" id="sbURL">${baseUrl}/${game.webhookSecret}/socialbuzz</div></div>
-      <div class="ub"><div class="ul"><span>🧪 Test Endpoint</span><button class="btn btn-sm" onclick="copy('testURL')">📋 Copy</button></div><div class="ut" id="testURL">${baseUrl}/${game.webhookSecret}/test?password=${encodeURIComponent(password)}</div></div>
+      <div class="ub"><div class="ul"><span>📡 Saweria</span><button class="btn btn-sm" onclick="copyText('sawURL')">📋 Copy</button></div><div class="ut" id="sawURL"></div></div>
+      <div class="ub"><div class="ul"><span>📡 SocialBuzz</span><button class="btn btn-sm" onclick="copyText('sbURL')">📋 Copy</button></div><div class="ut" id="sbURL"></div></div>
+      <div class="ub"><div class="ul"><span>🧪 Test</span><button class="btn btn-sm" onclick="copyText('testURL')">📋 Copy</button></div><div class="ut" id="testURL"></div></div>
     </div>
     <div class="card">
       <h3>💡 Format Username</h3>
-      <div style="color:#94a3b8;font-size:13px;line-height:2">
+      <div style="color:#94a3b8;font-size:13px;line-height:2.2">
         <p>• <code style="color:#10b981">[RobloxUsername] Pesan</code></p>
         <p>• <code style="color:#10b981">@RobloxUsername Pesan</code></p>
         <p>• <code style="color:#10b981">RobloxUsername: Pesan</code></p>
-        <p>• <code style="color:#10b981">RobloxUsername123</code> (kata pertama yg mengandung angka/underscore)</p>
+        <p>• <code style="color:#10b981">RobloxUsername123</code> (kata pertama mengandung angka/underscore)</p>
       </div>
     </div>
   </div>
 </div>
 
 <script>
-const PWD = ${JSON.stringify(password)};
-let donPage=0,donTotal=0,donLimit=50,searchTimer=null;
-function switchPage(id){document.querySelectorAll('.ntab').forEach(t=>t.classList.remove('active'));document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));const idx={overview:0,history:1,leaderboard:2,settings:3}[id];document.querySelectorAll('.ntab')[idx].classList.add('active');document.getElementById('p-'+id).classList.add('active');if(id==='history'&&document.getElementById('donTbody').innerHTML.includes('Loading'))loadDonations(0);if(id==='leaderboard'&&document.getElementById('lbTbody').innerHTML.includes('Loading'))loadLeaderboard();if(id==='overview'&&document.getElementById('sTotalAmount').textContent==='—')loadStats();}
-function fmt(n){return new Intl.NumberFormat('id-ID',{style:'currency',currency:'IDR',minimumFractionDigits:0}).format(n)}
-function fmtDate(s){return new Date(s).toLocaleString('id-ID',{dateStyle:'short',timeStyle:'short'})}
-function toast(msg,ok=true){const el=document.getElementById(ok?'tOk':'tErr');el.textContent=msg;el.style.display='block';setTimeout(()=>el.style.display='none',3000)}
-function copy(id){navigator.clipboard.writeText(document.getElementById(id).textContent).then(()=>toast('URL disalin!')).catch(()=>toast('Gagal copy','err'))}
-function sourceBadge(s){const m={Saweria:'bs',SocialBuzz:'bp',Test:'bw'};return '<span class="badge '+(m[s]||'bw')+'">'+s+'</span>'}
-function closeModal(){document.getElementById('cpModal').classList.remove('active')}
-function debounceSearch(){clearTimeout(searchTimer);searchTimer=setTimeout(()=>loadDonations(0),400)}
-async function loadStats(){try{const r=await fetch('/api/user/donations/stats?password='+encodeURIComponent(PWD));const d=await r.json();if(!d.success)return;document.getElementById('sTotalAmount').textContent=fmt(d.totals.total_amount||0);document.getElementById('sTotalCount').textContent=(d.totals.total_donations||0).toLocaleString();document.getElementById('sUniqueDonors').textContent=(d.totals.unique_donors||0).toLocaleString();const days=d.recent7||[];if(!days.length){document.getElementById('weekChart').innerHTML='<p style="color:#64748b;font-size:13px">Belum ada data minggu ini</p>';return;}const max=Math.max(...days.map(x=>parseInt(x.amount)||0),1);document.getElementById('weekChart').innerHTML=days.map(day=>{const pct=Math.max(4,Math.round((parseInt(day.amount)||0)/max*100));const label=new Date(day.day).toLocaleDateString('id-ID',{weekday:'short',day:'numeric'});return \`<div class="bar-wrap"><div class="bar" style="height:\${pct}%" title="\${fmt(day.amount)}"></div><div class="bar-label">\${label}</div></div>\`;}).join('');}catch(e){console.error(e);}}
-async function loadDonations(offset=0){donPage=offset;const search=document.getElementById('searchInput').value.trim();const tbody=document.getElementById('donTbody');tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:24px;color:#64748b">Loading…</td></tr>';try{const url=\`/api/user/donations?password=\${encodeURIComponent(PWD)}&limit=\${donLimit}&offset=\${offset}&search=\${encodeURIComponent(search)}\`;const r=await fetch(url);const d=await r.json();if(!d.success){tbody.innerHTML='<tr><td colspan="7" style="text-align:center;color:#ef4444">Error loading data</td></tr>';return;}donTotal=d.total;if(!d.donations.length){tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:30px;color:#64748b">Belum ada donasi</td></tr>';renderPagination();return;}tbody.innerHTML=d.donations.map((don,i)=>\`<tr><td style="color:#64748b">\${offset+i+1}</td><td style="white-space:nowrap">\${fmtDate(don.donated_at)}</td><td><strong style="color:#10b981">\${don.username}</strong></td><td style="color:#94a3b8">\${don.display_name||'—'}</td><td>\${sourceBadge(don.source||'?')}</td><td><strong>\${fmt(don.amount)}</strong></td><td style="color:#94a3b8;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="\${(don.message||'').replace(/"/g,'&quot;')}">\${don.message||'—'}</td></tr>\`).join('');renderPagination();}catch(e){tbody.innerHTML='<tr><td colspan="7" style="text-align:center;color:#ef4444">Connection error</td></tr>';}}
-function renderPagination(){const total=donTotal,pages=Math.ceil(total/donLimit),cur=Math.floor(donPage/donLimit);const el=document.getElementById('pagination');if(pages<=1){el.innerHTML='';return;}el.innerHTML=\`<button class="btn btn-sm btn-sec" \${cur===0?'disabled':''} onclick="loadDonations(\${(cur-1)*donLimit})">‹ Prev</button><span>\${cur+1} / \${pages} (Total: \${total.toLocaleString()})</span><button class="btn btn-sm btn-sec" \${cur>=pages-1?'disabled':''} onclick="loadDonations(\${(cur+1)*donLimit})">Next ›</button>\`;}
-async function loadLeaderboard(){const tbody=document.getElementById('lbTbody');try{const r=await fetch('/api/user/donations/stats?password='+encodeURIComponent(PWD));const d=await r.json();if(!d.success||!d.byUser.length){tbody.innerHTML='<tr><td colspan="6" style="text-align:center;padding:30px;color:#64748b">Belum ada data</td></tr>';return;}const medals=['🥇','🥈','🥉'];tbody.innerHTML=d.byUser.map((u,i)=>\`<tr><td><strong style="font-size:18px">\${medals[i]||('#'+(i+1))}</strong></td><td><strong style="color:#10b981">\${u.username}</strong></td><td style="color:#94a3b8">\${u.display_name||'—'}</td><td><span class="badge bp">\${u.donation_count}×</span></td><td><strong style="color:#f59e0b">\${fmt(u.total_amount)}</strong></td><td style="color:#64748b;font-size:12px">\${fmtDate(u.last_donation)}</td></tr>\`).join('');}catch(e){tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:#ef4444">Error</td></tr>';}}
-async function exportCSV(){try{toast('Mengambil data untuk export…');const r=await fetch(\`/api/user/donations?password=\${encodeURIComponent(PWD)}&limit=5000&offset=0\`);const d=await r.json();if(!d.success)return toast('Gagal export','err');const header='No,Waktu,Username,Nama,Platform,Jumlah,Pesan';const rows=d.donations.map((x,i)=>[i+1,new Date(x.donated_at).toISOString(),x.username,x.display_name,x.source,x.amount,(x.message||'').replace(/,/g,' ')].join(','));const csv=[header,...rows].join('\n');const blob=new Blob([csv],{type:'text/csv'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='donasi_'+Date.now()+'.csv';a.click();toast('Export berhasil!');}catch(e){toast('Gagal export','err');}}
-document.getElementById('cpForm').addEventListener('submit',async e=>{e.preventDefault();const cur=document.getElementById('cpCur').value;const nw=document.getElementById('cpNew').value;const con=document.getElementById('cpCon').value;if(nw!==con)return toast('Password baru tidak cocok','err');if(nw.length<6)return toast('Minimal 6 karakter','err');const r=await fetch('/api/user/change-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({currentPassword:cur,newPassword:nw})});const d=await r.json();if(d.success){toast('Password berhasil diubah! Redirecting…');setTimeout(()=>location.href='/dashboard?password='+encodeURIComponent(nw),2000);}else toast(d.error||'Gagal','err');});
-document.getElementById('cpModal').addEventListener('click',e=>{if(e.target.id==='cpModal')closeModal();});
-loadStats();
+(function() {
+  // Semua data game diambil dari server-side — tidak ada interpolasi string rawan inject
+  var CFG = {
+    pwd:     ${JSON.stringify(String(password))},
+    sawUrl:  ${JSON.stringify(baseUrl + '/' + String(game.webhookSecret) + '/saweria')},
+    sbUrl:   ${JSON.stringify(baseUrl + '/' + String(game.webhookSecret) + '/socialbuzz')},
+    testUrl: ${JSON.stringify(baseUrl + '/' + String(game.webhookSecret) + '/test')}
+  };
+
+  // Set URL setelah DOM load supaya tidak ada interpolasi di HTML
+  document.getElementById('sawURL').textContent  = CFG.sawUrl;
+  document.getElementById('sbURL').textContent   = CFG.sbUrl;
+  document.getElementById('testURL').textContent = CFG.testUrl + '?password=' + encodeURIComponent(CFG.pwd);
+
+  var donPage=0, donTotal=0, donLimit=50, searchTimer=null, statsLoaded=false, lbLoaded=false;
+
+  // ─ navigation ──────────────────────────────────────────────────────────────
+  window.switchPage = function(id) {
+    ['overview','history','leaderboard','settings'].forEach(function(x) {
+      document.getElementById('tab-'+x).classList.remove('active');
+      document.getElementById('p-'+x).classList.remove('active');
+    });
+    document.getElementById('tab-'+id).classList.add('active');
+    document.getElementById('p-'+id).classList.add('active');
+    if (id === 'overview' && !statsLoaded)   loadStats();
+    if (id === 'history')                    loadDonations(0);
+    if (id === 'leaderboard' && !lbLoaded)   loadLeaderboard();
+  };
+
+  // ─ utils ───────────────────────────────────────────────────────────────────
+  function fmt(n) {
+    return new Intl.NumberFormat('id-ID',{style:'currency',currency:'IDR',minimumFractionDigits:0}).format(n);
+  }
+  function fmtDate(s) {
+    return new Date(s).toLocaleString('id-ID',{dateStyle:'short',timeStyle:'short'});
+  }
+  function showToast(msg, ok) {
+    var el = document.getElementById(ok ? 'tOk' : 'tErr');
+    el.textContent = msg; el.style.display = 'block';
+    setTimeout(function(){ el.style.display = 'none'; }, 3500);
+  }
+  window.copyText = function(id) {
+    var text = document.getElementById(id).textContent;
+    navigator.clipboard.writeText(text)
+      .then(function(){ showToast('URL disalin!', true); })
+      .catch(function(){ showToast('Gagal copy', false); });
+  };
+  function sourceBadge(s) {
+    var m = {Saweria:'bs',SocialBuzz:'bp',Test:'bw'};
+    return '<span class="badge '+(m[s]||'bw')+'">'+s+'</span>';
+  }
+  function showErr(boxId, msgId, msg) {
+    document.getElementById(boxId).style.display = 'block';
+    document.getElementById(msgId).textContent = msg;
+  }
+  function hideErr(boxId) {
+    document.getElementById(boxId).style.display = 'none';
+  }
+
+  // ─ modal ───────────────────────────────────────────────────────────────────
+  window.closeCpModal = function() {
+    document.getElementById('cpModal').classList.remove('active');
+  };
+  document.getElementById('cpModal').addEventListener('click', function(e) {
+    if (e.target.id === 'cpModal') closeCpModal();
+  });
+  window.submitChangePwd = function() {
+    var cur = document.getElementById('cpCur').value;
+    var nw  = document.getElementById('cpNew').value;
+    var con = document.getElementById('cpCon').value;
+    if (nw !== con)    return showToast('Password baru tidak cocok', false);
+    if (nw.length < 6) return showToast('Minimal 6 karakter', false);
+    fetch('/api/user/change-password', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({currentPassword: cur, newPassword: nw})
+    })
+    .then(function(r){ return r.json(); })
+    .then(function(d) {
+      if (d.success) {
+        showToast('Password berhasil diubah!', true);
+        closeCpModal();
+        setTimeout(function(){
+          location.href = '/dashboard?password=' + encodeURIComponent(nw);
+        }, 1500);
+      } else {
+        showToast(d.error || 'Gagal', false);
+      }
+    })
+    .catch(function(e){ showToast('Connection error', false); });
+  };
+
+  // ─ stats ───────────────────────────────────────────────────────────────────
+  window.loadStats = function() {
+    hideErr('statsErr');
+    document.getElementById('weekChart').innerHTML = '<p style="color:#64748b;font-size:13px">Memuat…</p>';
+    fetch('/api/user/donations/stats?password=' + encodeURIComponent(CFG.pwd))
+      .then(function(r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      })
+      .then(function(d) {
+        if (!d.success) throw new Error(d.error || 'Unauthorized');
+        statsLoaded = true;
+        document.getElementById('sTotalAmount').textContent  = fmt(d.totals.total_amount || 0);
+        document.getElementById('sTotalCount').textContent   = Number(d.totals.total_donations || 0).toLocaleString();
+        document.getElementById('sUniqueDonors').textContent = Number(d.totals.unique_donors || 0).toLocaleString();
+        var days = d.recent7 || [];
+        if (!days.length) {
+          document.getElementById('weekChart').innerHTML = '<p style="color:#64748b;font-size:13px">Belum ada data minggu ini</p>';
+          return;
+        }
+        var max = Math.max.apply(null, days.map(function(x){ return parseInt(x.amount)||0; }).concat([1]));
+        document.getElementById('weekChart').innerHTML = days.map(function(day) {
+          var pct   = Math.max(4, Math.round((parseInt(day.amount)||0) / max * 100));
+          var label = new Date(day.day).toLocaleDateString('id-ID',{weekday:'short',day:'numeric'});
+          return '<div class="bar-wrap"><div class="bar" style="height:'+pct+'%" title="'+fmt(day.amount)+'"></div><div class="bar-label">'+label+'</div></div>';
+        }).join('');
+      })
+      .catch(function(e) {
+        showErr('statsErr', 'statsErrMsg', e.message);
+      });
+  };
+
+  // ─ donations ───────────────────────────────────────────────────────────────
+  window.loadDonations = function(offset) {
+    if (offset === undefined) offset = 0;
+    donPage = offset;
+    hideErr('donErr');
+    var search = document.getElementById('searchInput').value.trim();
+    var tbody  = document.getElementById('donTbody');
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px;color:#64748b">Memuat…</td></tr>';
+    var url = '/api/user/donations?password=' + encodeURIComponent(CFG.pwd)
+            + '&limit=' + donLimit + '&offset=' + offset
+            + '&search=' + encodeURIComponent(search);
+    fetch(url)
+      .then(function(r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      })
+      .then(function(d) {
+        if (!d.success) throw new Error(d.error || 'Gagal memuat donasi');
+        donTotal = d.total;
+        if (!d.donations.length) {
+          tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:30px;color:#64748b">Belum ada donasi</td></tr>';
+          renderPagination();
+          return;
+        }
+        tbody.innerHTML = d.donations.map(function(don, i) {
+          var msg = (don.message || '').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+          return '<tr>'
+            + '<td style="color:#64748b">'+(offset+i+1)+'</td>'
+            + '<td style="white-space:nowrap">'+fmtDate(don.donated_at)+'</td>'
+            + '<td><strong style="color:#10b981">'+(don.username||'')+'</strong></td>'
+            + '<td style="color:#94a3b8">'+(don.display_name||'—')+'</td>'
+            + '<td>'+sourceBadge(don.source||'?')+'</td>'
+            + '<td><strong>'+fmt(don.amount)+'</strong></td>'
+            + '<td style="color:#94a3b8;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+msg+'">'+(don.message||'—')+'</td>'
+            + '</tr>';
+        }).join('');
+        renderPagination();
+      })
+      .catch(function(e) {
+        tbody.innerHTML = '';
+        showErr('donErr', 'donErrMsg', e.message);
+      });
+  };
+  window.debounceSearch = function() {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(function(){ loadDonations(0); }, 400);
+  };
+  function renderPagination() {
+    var pages = Math.ceil(donTotal / donLimit);
+    var cur   = Math.floor(donPage / donLimit);
+    var el    = document.getElementById('pagination');
+    if (pages <= 1) { el.innerHTML = ''; return; }
+    el.innerHTML = ''
+      + '<button class="btn btn-sm btn-sec" '+(cur===0?'disabled':'')+' onclick="loadDonations('+(cur-1)*donLimit+')">‹ Prev</button>'
+      + '<span>'+( cur+1)+' / '+pages+' (Total: '+donTotal.toLocaleString()+')</span>'
+      + '<button class="btn btn-sm btn-sec" '+(cur>=pages-1?'disabled':'')+' onclick="loadDonations('+(cur+1)*donLimit+')">Next ›</button>';
+  }
+
+  // ─ leaderboard ─────────────────────────────────────────────────────────────
+  window.loadLeaderboard = function() {
+    hideErr('lbErr');
+    var tbody = document.getElementById('lbTbody');
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:#64748b">Memuat…</td></tr>';
+    fetch('/api/user/donations/stats?password=' + encodeURIComponent(CFG.pwd))
+      .then(function(r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      })
+      .then(function(d) {
+        if (!d.success) throw new Error(d.error || 'Unauthorized');
+        lbLoaded = true;
+        if (!d.byUser || !d.byUser.length) {
+          tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:30px;color:#64748b">Belum ada data</td></tr>';
+          return;
+        }
+        var medals = ['🥇','🥈','🥉'];
+        tbody.innerHTML = d.byUser.map(function(u, i) {
+          return '<tr>'
+            + '<td><strong style="font-size:18px">'+(medals[i]||('#'+(i+1)))+'</strong></td>'
+            + '<td><strong style="color:#10b981">'+u.username+'</strong></td>'
+            + '<td style="color:#94a3b8">'+(u.display_name||'—')+'</td>'
+            + '<td><span class="badge bp">'+u.donation_count+'×</span></td>'
+            + '<td><strong style="color:#f59e0b">'+fmt(u.total_amount)+'</strong></td>'
+            + '<td style="color:#64748b;font-size:12px">'+fmtDate(u.last_donation)+'</td>'
+            + '</tr>';
+        }).join('');
+      })
+      .catch(function(e) {
+        tbody.innerHTML = '';
+        showErr('lbErr', 'lbErrMsg', e.message);
+      });
+  };
+
+  // ─ export CSV ──────────────────────────────────────────────────────────────
+  window.exportCSV = function() {
+    showToast('Mengambil data…', true);
+    fetch('/api/user/donations?password=' + encodeURIComponent(CFG.pwd) + '&limit=5000&offset=0')
+      .then(function(r){ return r.json(); })
+      .then(function(d) {
+        if (!d.success) { showToast('Gagal export', false); return; }
+        var header = 'No,Waktu,Username,Nama,Platform,Jumlah,Pesan';
+        var rows = d.donations.map(function(x, i) {
+          return [i+1, new Date(x.donated_at).toISOString(), x.username, x.display_name, x.source, x.amount, (x.message||'').replace(/,/g,' ')].join(',');
+        });
+        var csv  = [header].concat(rows).join('\n');
+        var blob = new Blob([csv],{type:'text/csv'});
+        var a    = document.createElement('a');
+        a.href     = URL.createObjectURL(blob);
+        a.download = 'donasi_' + Date.now() + '.csv';
+        a.click();
+        showToast('Export berhasil!', true);
+      })
+      .catch(function(){ showToast('Gagal export', false); });
+  };
+
+  // init
+  loadStats();
+})();
 </script>
 </body></html>`);
 });
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Admin Dashboard
