@@ -146,13 +146,7 @@ function loadEnvGames() {
 // GAMES array — passwords loaded lazily from PostgreSQL
 let GAMES = loadEnvGames();
 
-// Seed env passwords into PG if not already set
-(async () => {
-    for (const g of GAMES) {
-        const existing = await dbGetPassword(g.id).catch(() => null);
-        if (!existing) await dbSetPassword(g.id, g.envPassword).catch(() => {});
-    }
-})();
+// Passwords seeded after auto-migration (see autoMigrate() at bottom)
 
 if (!GAMES.length) {
     console.error('❌ No games configured! Set GAME_1_UNIVERSE_ID, GAME_1_API_KEY, GAME_1_WEBHOOK_SECRET, GAME_1_PASSWORD');
@@ -1061,9 +1055,56 @@ app.use((_req, res) => res.status(404).json({ error: 'Not found' }));
 // ─────────────────────────────────────────────────────────────────────────────
 //  Start
 // ─────────────────────────────────────────────────────────────────────────────
-app.listen(port, () => {
-    console.log(`✅ Server running on port ${port}`);
-    console.log(`🎮 Games: ${GAMES.map(g => g.name).join(', ')}`);
-    const db = readDB();
-    console.log(`👑 Admin: ${db.admin.username}`);
-});
+async function autoMigrate() {
+    const client = await pool.connect();
+    try {
+        console.log('🔄 Auto-migration running...');
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS game_passwords (
+                game_id    VARCHAR(50)  PRIMARY KEY,
+                password   VARCHAR(255) NOT NULL,
+                updated_at TIMESTAMPTZ  DEFAULT NOW()
+            )
+        `);
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS donations (
+                id           SERIAL       PRIMARY KEY,
+                game_id      VARCHAR(50)  NOT NULL,
+                username     VARCHAR(255) NOT NULL,
+                display_name VARCHAR(255),
+                amount       BIGINT       NOT NULL DEFAULT 0,
+                source       VARCHAR(50),
+                message      TEXT,
+                email        VARCHAR(255),
+                donated_at   TIMESTAMPTZ  DEFAULT NOW()
+            )
+        `);
+        await client.query(`CREATE INDEX IF NOT EXISTS idx_don_game      ON donations(game_id)`);
+        await client.query(`CREATE INDEX IF NOT EXISTS idx_don_game_date ON donations(game_id, donated_at DESC)`);
+        await client.query(`CREATE INDEX IF NOT EXISTS idx_don_user      ON donations(game_id, username)`);
+        console.log('✅ Migration done');
+    } catch (err) {
+        console.error('❌ Migration error:', err.message);
+        throw err;
+    } finally {
+        client.release();
+    }
+}
+
+autoMigrate()
+    .then(() => Promise.all(GAMES.map(async g => {
+        const existing = await dbGetPassword(g.id).catch(() => null);
+        if (!existing) await dbSetPassword(g.id, g.envPassword).catch(() => {});
+    })))
+    .then(() => {
+        app.listen(port, () => {
+            console.log(`✅ Server running on port ${port}`);
+            console.log(`🎮 Games: ${GAMES.map(g => g.name).join(', ')}`);
+            const db = readDB();
+            console.log(`👑 Admin: ${db.admin.username}`);
+        });
+    })
+    .catch(err => {
+        console.error('❌ Startup failed:', err.message);
+        process.exit(1);
+    });
