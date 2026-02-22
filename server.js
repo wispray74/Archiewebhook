@@ -851,7 +851,8 @@ app.get('/dashboard', async (req, res) => {
   var settingsUrlsSet = false;
 
   // ─ navigation ──────────────────────────────────────────────────────────────
-  window.switchPage = function(id) {
+  window.switchPage = switchPage;
+  function switchPage(id) {
     ['overview','history','leaderboard','settings'].forEach(function(x) {
       document.getElementById('tab-'+x).classList.remove('active');
       document.getElementById('p-'+x).classList.remove('active');
@@ -882,7 +883,8 @@ app.get('/dashboard', async (req, res) => {
     el.textContent = msg; el.style.display = 'block';
     setTimeout(function(){ el.style.display = 'none'; }, 3500);
   }
-  window.copyText = function(id) {
+  window.copyText = copyText;
+  function copyText(id) {
     var text = document.getElementById(id).textContent;
     navigator.clipboard.writeText(text)
       .then(function(){ showToast('URL disalin!', true); })
@@ -901,13 +903,15 @@ app.get('/dashboard', async (req, res) => {
   }
 
   // ─ modal ───────────────────────────────────────────────────────────────────
-  window.closeCpModal = function() {
+  window.closeCpModal = closeCpModal;
+  function closeCpModal() {
     document.getElementById('cpModal').classList.remove('active');
   };
   document.getElementById('cpModal').addEventListener('click', function(e) {
     if (e.target.id === 'cpModal') closeCpModal();
   });
-  window.submitChangePwd = function() {
+  window.submitChangePwd = submitChangePwd;
+  function submitChangePwd() {
     var cur = document.getElementById('cpCur').value;
     var nw  = document.getElementById('cpNew').value;
     var con = document.getElementById('cpCon').value;
@@ -934,7 +938,8 @@ app.get('/dashboard', async (req, res) => {
   };
 
   // ─ stats ───────────────────────────────────────────────────────────────────
-  window.loadStats = function() {
+  window.loadStats = loadStats;
+  function loadStats() {
     hideErr('statsErr');
     document.getElementById('weekChart').innerHTML = '<p style="color:#64748b;font-size:13px">Memuat…</p>';
     fetch('/api/user/donations/stats?password=' + encodeURIComponent(CFG.pwd))
@@ -966,7 +971,8 @@ app.get('/dashboard', async (req, res) => {
   };
 
   // ─ donations ───────────────────────────────────────────────────────────────
-  window.loadDonations = function(offset) {
+  window.loadDonations = loadDonations;
+  function loadDonations(offset) {
     if (offset === undefined) offset = 0;
     donPage = offset;
     hideErr('donErr');
@@ -1008,7 +1014,8 @@ app.get('/dashboard', async (req, res) => {
         showErr('donErr', 'donErrMsg', e.message);
       });
   };
-  window.debounceSearch = function() {
+  window.debounceSearch = debounceSearch;
+  function debounceSearch() {
     clearTimeout(searchTimer);
     searchTimer = setTimeout(function(){ loadDonations(0); }, 400);
   };
@@ -1024,7 +1031,8 @@ app.get('/dashboard', async (req, res) => {
   }
 
   // ─ leaderboard ─────────────────────────────────────────────────────────────
-  window.loadLeaderboard = function() {
+  window.loadLeaderboard = loadLeaderboard;
+  function loadLeaderboard() {
     hideErr('lbErr');
     var tbody = document.getElementById('lbTbody');
     tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:#64748b">Memuat…</td></tr>';
@@ -1059,7 +1067,8 @@ app.get('/dashboard', async (req, res) => {
   };
 
   // ─ export CSV ──────────────────────────────────────────────────────────────
-  window.exportCSV = function() {
+  window.exportCSV = exportCSV;
+  function exportCSV() {
     showToast('Mengambil data…', true);
     fetch('/api/user/donations?password=' + encodeURIComponent(CFG.pwd) + '&limit=5000&offset=0')
       .then(function(r){ return r.json(); })
