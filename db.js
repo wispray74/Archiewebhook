@@ -1,28 +1,46 @@
 const { Pool } = require('pg');
 
-// Railway bisa inject DATABASE_URL  — atau —  PGHOST/PGUSER/PGPASSWORD/PGDATABASE/PGPORT secara terpisah
+// Debug: cetak semua env vars yg berhubungan PG/POSTGRES/DATABASE
+const pgKeys = Object.keys(process.env).filter(k => /^(PG|POSTGRES|DATABASE)/i.test(k));
+console.log('🔍 PG-related env vars:', pgKeys.length ? pgKeys.join(', ') : '(none)');
+
+// Railway kadang inject dengan nama berbeda — coba semua kemungkinan
+const host     = process.env.PGHOST         || process.env.POSTGRES_HOST     || process.env.DB_HOST;
+const port     = process.env.PGPORT         || process.env.POSTGRES_PORT     || process.env.DB_PORT     || '5432';
+const user     = process.env.PGUSER         || process.env.POSTGRES_USER     || process.env.POSTGRES_USERNAME || process.env.DB_USER;
+const password = process.env.PGPASSWORD     || process.env.POSTGRES_PASSWORD || process.env.DB_PASSWORD;
+const database = process.env.PGDATABASE     || process.env.POSTGRES_DB       || process.env.POSTGRES_DATABASE || process.env.DB_NAME;
+const dbUrl    = process.env.DATABASE_URL   || process.env.DATABASE_PRIVATE_URL || process.env.POSTGRES_URL;
+
 let pool;
 
-if (process.env.DATABASE_URL) {
+if (dbUrl) {
+    console.log('🔌 PostgreSQL: using connection URL');
     pool = new Pool({
-        connectionString: process.env.DATABASE_URL,
+        connectionString: dbUrl,
         ssl: { rejectUnauthorized: false }
     });
-    console.log('🔌 PostgreSQL: using DATABASE_URL');
-} else if (process.env.PGHOST) {
+} else if (host && user && password && database) {
+    console.log(`🔌 PostgreSQL: ${user}@${host}:${port}/${database}`);
     pool = new Pool({
-        host:     process.env.PGHOST,
-        port:     parseInt(process.env.PGPORT || '5432'),
-        user:     process.env.PGUSER,
-        password: process.env.PGPASSWORD,
-        database: process.env.PGDATABASE,
+        host,
+        port:     parseInt(port),
+        user,
+        password,
+        database,
         ssl:      { rejectUnauthorized: false }
     });
-    console.log(`🔌 PostgreSQL: ${process.env.PGUSER}@${process.env.PGHOST}:${process.env.PGPORT || 5432}/${process.env.PGDATABASE}`);
 } else {
-    console.error('❌ No PostgreSQL config found!');
-    console.error('   Pastikan Railway PostgreSQL plugin sudah di-add dan di-link ke service ini.');
-    console.error('   Env vars yang dibutuhkan: DATABASE_URL  —atau—  PGHOST + PGUSER + PGPASSWORD + PGDATABASE');
+    console.error('❌ PostgreSQL config tidak lengkap!');
+    console.error(`   host=${host}, user=${user}, password=${password ? '***set***' : 'MISSING'}, database=${database}`);
+    console.error('');
+    console.error('   CARA FIX di Railway:');
+    console.error('   1. Buka service PostgreSQL kamu di Railway Dashboard');
+    console.error('   2. Klik tab "Connect"');
+    console.error('   3. Copy salah satu dari:');
+    console.error('      - DATABASE_URL  (recommended)');
+    console.error('      - Atau PGHOST + PGUSER + PGPASSWORD + PGDATABASE');
+    console.error('   4. Tambahkan ke Variables di service Node.js kamu');
     process.exit(1);
 }
 
