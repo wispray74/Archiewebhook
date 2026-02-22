@@ -13,14 +13,13 @@ app.use(express.json({ verify: (req, _res, buf, encoding) => {
 app.use(express.urlencoded({ extended: true }));
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  JSON flat-file fallback (users.json) — still used for admin credentials
+//  JSON flat-file fallback — admin credentials
 // ─────────────────────────────────────────────────────────────────────────────
 const VOLUME_PATH = process.env.VOLUME_PATH || __dirname;
 const DB_FILE     = path.join(VOLUME_PATH, 'users.json');
 
-if (process.env.VOLUME_PATH && !fs.existsSync(VOLUME_PATH)) {
+if (process.env.VOLUME_PATH && !fs.existsSync(VOLUME_PATH))
     fs.mkdirSync(VOLUME_PATH, { recursive: true });
-}
 
 function readDB() {
     try {
@@ -37,7 +36,7 @@ function writeDB(data) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  PostgreSQL helpers — passwords
+//  PostgreSQL helpers — game_passwords
 // ─────────────────────────────────────────────────────────────────────────────
 async function dbGetPassword(gameId) {
     const { rows } = await pool.query('SELECT password FROM game_passwords WHERE game_id = $1', [gameId]);
@@ -49,6 +48,72 @@ async function dbSetPassword(gameId, password) {
         VALUES ($1, $2, NOW())
         ON CONFLICT (game_id) DO UPDATE SET password = $2, updated_at = NOW()
     `, [gameId, password]);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  PostgreSQL helpers — games table
+// ─────────────────────────────────────────────────────────────────────────────
+async function dbGetAllGames() {
+    const { rows } = await pool.query('SELECT * FROM games ORDER BY created_at ASC');
+    return rows.map(rowToGame);
+}
+
+async function dbGetGameBySecret(webhookSecret) {
+    const { rows } = await pool.query('SELECT * FROM games WHERE webhook_secret = $1', [webhookSecret]);
+    return rows[0] ? rowToGame(rows[0]) : null;
+}
+
+async function dbGetGameById(gameId) {
+    const { rows } = await pool.query('SELECT * FROM games WHERE id = $1', [gameId]);
+    return rows[0] ? rowToGame(rows[0]) : null;
+}
+
+async function dbAddGame(game) {
+    await pool.query(`
+        INSERT INTO games (id, name, universe_id, api_key, topic, webhook_secret, saweria_token, socialbuzz_token)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+    `, [game.id, game.name, game.universeId, game.apiKey, game.topic, game.webhookSecret, game.saweriaToken || null, game.socialbuzzToken || null]);
+}
+
+async function dbUpdateGame(gameId, fields) {
+    const sets = [];
+    const params = [];
+    let i = 1;
+    const allowed = ['name','universe_id','api_key','topic','webhook_secret','saweria_token','socialbuzz_token'];
+    for (const [k, v] of Object.entries(fields)) {
+        if (allowed.includes(k)) { sets.push(`${k} = $${i++}`); params.push(v); }
+    }
+    if (!sets.length) return;
+    params.push(gameId);
+    await pool.query(`UPDATE games SET ${sets.join(', ')} WHERE id = $${i}`, params);
+}
+
+async function dbDeleteGame(gameId) {
+    await pool.query('DELETE FROM games WHERE id = $1', [gameId]);
+    await pool.query('DELETE FROM game_passwords WHERE game_id = $1', [gameId]);
+    // Keep donation history (just orphaned, for audit)
+}
+
+function rowToGame(row) {
+    return {
+        id:              row.id,
+        name:            row.name,
+        universeId:      row.universe_id,
+        apiKey:          row.api_key,
+        topic:           row.topic || 'ArchieDonationIDR',
+        webhookSecret:   row.webhook_secret,
+        saweriaToken:    row.saweria_token || null,
+        socialbuzzToken: row.socialbuzz_token || null
+    };
+}
+
+function generateGameId() {
+    return 'game_' + Date.now().toString(36);
+}
+
+function generateSecret(name) {
+    const clean = name.toLowerCase().replace(/[^a-z0-9]/g, '');
+    return clean + '_' + Math.random().toString(36).slice(2, 8);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -73,37 +138,19 @@ async function dbGetDonations(gameId, { limit = 50, offset = 0, search = '' } = 
 
 async function dbGetDonationStats(gameId) {
     const totals = await pool.query(`
-        SELECT
-            COUNT(*)            AS total_donations,
-            COALESCE(SUM(amount),0) AS total_amount,
-            COUNT(DISTINCT username) AS unique_donors
+        SELECT COUNT(*) AS total_donations, COALESCE(SUM(amount),0) AS total_amount, COUNT(DISTINCT username) AS unique_donors
         FROM donations WHERE game_id = $1
     `, [gameId]);
-
     const byUser = await pool.query(`
-        SELECT
-            username,
-            display_name,
-            COUNT(*)            AS donation_count,
-            SUM(amount)         AS total_amount,
-            MAX(donated_at)     AS last_donation
-        FROM donations
-        WHERE game_id = $1
-        GROUP BY username, display_name
-        ORDER BY total_amount DESC
-        LIMIT 20
+        SELECT username, display_name, COUNT(*) AS donation_count, SUM(amount) AS total_amount, MAX(donated_at) AS last_donation
+        FROM donations WHERE game_id = $1
+        GROUP BY username, display_name ORDER BY total_amount DESC LIMIT 20
     `, [gameId]);
-
     const recent7 = await pool.query(`
-        SELECT
-            DATE(donated_at) AS day,
-            COUNT(*)         AS donations,
-            SUM(amount)      AS amount
-        FROM donations
-        WHERE game_id = $1 AND donated_at >= NOW() - INTERVAL '7 days'
+        SELECT DATE(donated_at) AS day, COUNT(*) AS donations, SUM(amount) AS amount
+        FROM donations WHERE game_id = $1 AND donated_at >= NOW() - INTERVAL '7 days'
         GROUP BY day ORDER BY day ASC
     `, [gameId]);
-
     return { totals: totals.rows[0], byUser: byUser.rows, recent7: recent7.rows };
 }
 
@@ -116,7 +163,7 @@ async function dbCountDonations(gameId, search = '') {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Game initialisation — passwords synced from env ➜ PostgreSQL on start
+//  Load env-based games for seeding
 // ─────────────────────────────────────────────────────────────────────────────
 function loadEnvGames() {
     const games = [];
@@ -128,39 +175,29 @@ function loadEnvGames() {
         const pwd = process.env[`GAME_${i}_PASSWORD`];
         if (!uid || !key || !sec || !pwd) break;
         games.push({
-            id: `game${i}`,
-            name:           process.env[`GAME_${i}_NAME`] || `Game ${i}`,
-            universeId:     uid,
-            apiKey:         key,
-            topic:          process.env[`GAME_${i}_TOPIC`] || 'ArchieDonationIDR',
-            webhookSecret:  sec,
-            envPassword:    pwd,           // from env (fallback)
-            saweriaToken:   process.env[`GAME_${i}_SAWERIA_TOKEN`],
-            socialbuzzToken: process.env[`GAME_${i}_SOCIALBUZZ_TOKEN`]
+            id:              `game${i}`,
+            name:            process.env[`GAME_${i}_NAME`] || `Game ${i}`,
+            universeId:      uid,
+            apiKey:          key,
+            topic:           process.env[`GAME_${i}_TOPIC`] || 'ArchieDonationIDR',
+            webhookSecret:   sec,
+            saweriaToken:    process.env[`GAME_${i}_SAWERIA_TOKEN`] || null,
+            socialbuzzToken: process.env[`GAME_${i}_SOCIALBUZZ_TOKEN`] || null,
+            envPassword:     pwd
         });
         i++;
     }
     return games;
 }
 
-// GAMES array — passwords loaded lazily from PostgreSQL
-let GAMES = loadEnvGames();
-
-// Passwords seeded after auto-migration (see autoMigrate() at bottom)
-
-if (!GAMES.length) {
-    console.error('❌ No games configured! Set GAME_1_UNIVERSE_ID, GAME_1_API_KEY, GAME_1_WEBHOOK_SECRET, GAME_1_PASSWORD');
-    process.exit(1);
-}
-console.log(`🎮 Archie Webhook — ${GAMES.length} game(s) configured`);
-GAMES.forEach(g => console.log(`   📌 ${g.id}: ${g.name} (Universe: ${g.universeId})`));
-
 // ─────────────────────────────────────────────────────────────────────────────
 //  Auth helpers
 // ─────────────────────────────────────────────────────────────────────────────
 async function authenticateGame(password) {
-    for (const game of GAMES) {
-        const pwd = await dbGetPassword(game.id).catch(() => game.envPassword);
+    if (!password) return null;
+    const games = await dbGetAllGames();
+    for (const game of games) {
+        const pwd = await dbGetPassword(game.id).catch(() => null);
         if (pwd && pwd === password) return game;
     }
     return null;
@@ -171,11 +208,15 @@ function authenticateAdmin(username, password) {
     return db.admin.username === username && db.admin.password === password;
 }
 
+function adminFromToken(token) {
+    try {
+        const [u, p] = Buffer.from(token, 'base64').toString().split(':');
+        return authenticateAdmin(u, p) ? { username: u } : null;
+    } catch { return null; }
+}
+
 async function updateGameLastActive(gameId) {
-    await pool.query(
-        `UPDATE game_passwords SET updated_at = NOW() WHERE game_id = $1`,
-        [gameId]
-    ).catch(() => {});
+    await pool.query(`UPDATE game_passwords SET updated_at = NOW() WHERE game_id = $1`, [gameId]).catch(() => {});
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -215,89 +256,93 @@ async function sendToRoblox(game, data) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Webhook routes
+//  Dynamic Webhook Routes
 // ─────────────────────────────────────────────────────────────────────────────
-GAMES.forEach(game => {
 
-    // ── Saweria ──────────────────────────────────────────────────────────────
-    app.post(`/${game.webhookSecret}/saweria`, async (req, res) => {
-        console.log(`\n📩 [${game.name}] Saweria webhook`);
-        if (game.saweriaToken && !verifyWebhookToken(req, game.saweriaToken))
-            return res.status(401).json({ success: false, error: 'Unauthorized' });
-        const p = req.body;
-        if (!p || p.type !== 'donation') return res.status(200).json({ success: true, message: 'OK' });
-        const donation = {
-            username:    extractUsername(p.message || '', p.donator_name || 'Anonymous'),
-            displayName: p.donator_name || 'Anonymous',
-            amount:      Math.floor(p.amount_raw || 0),
-            timestamp:   Math.floor(Date.now() / 1000),
-            source:      'Saweria',
-            message:     p.message || '',
-            email:       p.donator_email || ''
-        };
-        try {
-            await sendToRoblox(game, donation);
-            await dbSaveDonation(game.id, donation);
-            return res.status(200).json({ success: true });
-        } catch (e) {
-            console.error(`❌ [${game.name}]`, e.message);
-            return res.status(500).json({ success: false, error: 'Failed' });
-        }
-    });
+// ── Saweria ──────────────────────────────────────────────────────────────────
+app.post('/:webhookSecret/saweria', async (req, res) => {
+    const game = await dbGetGameBySecret(req.params.webhookSecret);
+    if (!game) return res.status(404).json({ error: 'Not found' });
+    console.log(`\n📩 [${game.name}] Saweria webhook`);
+    if (game.saweriaToken && !verifyWebhookToken(req, game.saweriaToken))
+        return res.status(401).json({ success: false, error: 'Unauthorized' });
+    const p = req.body;
+    if (!p || p.type !== 'donation') return res.status(200).json({ success: true, message: 'OK' });
+    const donation = {
+        username:    extractUsername(p.message || '', p.donator_name || 'Anonymous'),
+        displayName: p.donator_name || 'Anonymous',
+        amount:      Math.floor(p.amount_raw || 0),
+        timestamp:   Math.floor(Date.now() / 1000),
+        source:      'Saweria',
+        message:     p.message || '',
+        email:       p.donator_email || ''
+    };
+    try {
+        await sendToRoblox(game, donation);
+        await dbSaveDonation(game.id, donation);
+        return res.status(200).json({ success: true });
+    } catch (e) {
+        console.error(`❌ [${game.name}]`, e.message);
+        return res.status(500).json({ success: false, error: 'Failed' });
+    }
+});
 
-    // ── SocialBuzz ───────────────────────────────────────────────────────────
-    app.post(`/${game.webhookSecret}/socialbuzz`, async (req, res) => {
-        console.log(`\n📩 [${game.name}] SocialBuzz webhook`);
-        console.log('📦 Payload:', JSON.stringify(req.body, null, 2));
-        if (game.socialbuzzToken && !verifyWebhookToken(req, game.socialbuzzToken))
-            return res.status(401).json({ success: false, error: 'Unauthorized' });
-        const p = req.body;
-        if (!p) return res.status(400).json({ success: false, error: 'No payload' });
-        const rawMsg  = p.message || p.supporter_message || p.note || p.comment || '';
-        const rawName = p.supporter_name || p.name || p.donator_name || 'Anonymous';
-        const donation = {
-            username:    extractUsername(rawMsg, rawName),
-            displayName: rawName,
-            amount:      Math.floor(p.amount || p.donation_amount || p.amount_raw || 0),
-            timestamp:   Math.floor(Date.now() / 1000),
-            source:      'SocialBuzz',
-            message:     rawMsg,
-            email:       p.supporter_email || p.email || ''
-        };
-        console.log('✅ Donation:', JSON.stringify(donation, null, 2));
-        try {
-            await sendToRoblox(game, donation);
-            await dbSaveDonation(game.id, donation);
-            return res.status(200).json({ success: true });
-        } catch (e) {
-            console.error(`❌ [${game.name}]`, e.message);
-            return res.status(500).json({ success: false, error: 'Failed' });
-        }
-    });
+// ── SocialBuzz ───────────────────────────────────────────────────────────────
+app.post('/:webhookSecret/socialbuzz', async (req, res) => {
+    const game = await dbGetGameBySecret(req.params.webhookSecret);
+    if (!game) return res.status(404).json({ error: 'Not found' });
+    console.log(`\n📩 [${game.name}] SocialBuzz webhook`);
+    console.log('📦 Payload:', JSON.stringify(req.body, null, 2));
+    if (game.socialbuzzToken && !verifyWebhookToken(req, game.socialbuzzToken))
+        return res.status(401).json({ success: false, error: 'Unauthorized' });
+    const p = req.body;
+    if (!p) return res.status(400).json({ success: false, error: 'No payload' });
+    const rawMsg  = p.message || p.supporter_message || p.note || p.comment || '';
+    const rawName = p.supporter_name || p.name || p.donator_name || 'Anonymous';
+    const donation = {
+        username:    extractUsername(rawMsg, rawName),
+        displayName: rawName,
+        amount:      Math.floor(p.amount || p.donation_amount || p.amount_raw || 0),
+        timestamp:   Math.floor(Date.now() / 1000),
+        source:      'SocialBuzz',
+        message:     rawMsg,
+        email:       p.supporter_email || p.email || ''
+    };
+    console.log('✅ Donation:', JSON.stringify(donation, null, 2));
+    try {
+        await sendToRoblox(game, donation);
+        await dbSaveDonation(game.id, donation);
+        return res.status(200).json({ success: true });
+    } catch (e) {
+        console.error(`❌ [${game.name}]`, e.message);
+        return res.status(500).json({ success: false, error: 'Failed' });
+    }
+});
 
-    // ── Test ─────────────────────────────────────────────────────────────────
-    app.post(`/${game.webhookSecret}/test`, async (req, res) => {
-        const password = req.query.password || req.body?.password;
-        const authGame = await authenticateGame(password);
-        if (!authGame || authGame.id !== game.id)
-            return res.status(401).json({ success: false, error: 'Unauthorized' });
-        const donation = {
-            username:    req.body.username || 'TestUser',
-            displayName: 'Test Donator',
-            amount:      parseInt(req.body.amount) || 25000,
-            timestamp:   Math.floor(Date.now() / 1000),
-            source:      'Test',
-            message:     'Test donation',
-            email:       ''
-        };
-        try {
-            await sendToRoblox(game, donation);
-            await dbSaveDonation(game.id, donation);
-            return res.json({ success: true, message: 'Test sent', game: game.name });
-        } catch (e) {
-            return res.status(500).json({ success: false, error: e.message });
-        }
-    });
+// ── Test ─────────────────────────────────────────────────────────────────────
+app.post('/:webhookSecret/test', async (req, res) => {
+    const game = await dbGetGameBySecret(req.params.webhookSecret);
+    if (!game) return res.status(404).json({ error: 'Not found' });
+    const password = req.query.password || req.body?.password;
+    const authGame = await authenticateGame(password);
+    if (!authGame || authGame.id !== game.id)
+        return res.status(401).json({ success: false, error: 'Unauthorized' });
+    const donation = {
+        username:    req.body.username || 'TestUser',
+        displayName: 'Test Donator',
+        amount:      parseInt(req.body.amount) || 25000,
+        timestamp:   Math.floor(Date.now() / 1000),
+        source:      'Test',
+        message:     'Test donation',
+        email:       ''
+    };
+    try {
+        await sendToRoblox(game, donation);
+        await dbSaveDonation(game.id, donation);
+        return res.json({ success: true, message: 'Test sent', game: game.name });
+    } catch (e) {
+        return res.status(500).json({ success: false, error: e.message });
+    }
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -361,24 +406,22 @@ app.get('/api/user/donations/stats', async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 //  API — admin users
 // ─────────────────────────────────────────────────────────────────────────────
-function adminFromToken(token) {
-    try {
-        const [u, p] = Buffer.from(token, 'base64').toString().split(':');
-        return authenticateAdmin(u, p) ? { username: u } : null;
-    } catch { return null; }
-}
-
 app.get('/api/admin/users', async (req, res) => {
     if (!adminFromToken(req.query.token || ''))
         return res.status(401).json({ success: false, error: 'Unauthorized' });
-    const users = await Promise.all(GAMES.map(async g => {
+    const games = await dbGetAllGames();
+    const users = await Promise.all(games.map(async g => {
         const { rows } = await pool.query('SELECT updated_at FROM game_passwords WHERE game_id=$1', [g.id]).catch(() => ({ rows: [] }));
         const { rows: stats } = await pool.query('SELECT COUNT(*) AS cnt, COALESCE(SUM(amount),0) AS total FROM donations WHERE game_id=$1', [g.id]).catch(() => ({ rows: [{ cnt:0, total:0 }] }));
         return {
-            id:         g.id,
-            name:       g.name,
-            universeId: g.universeId,
-            lastActive: rows[0]?.updated_at || null,
+            id:            g.id,
+            name:          g.name,
+            universeId:    g.universeId,
+            topic:         g.topic,
+            webhookSecret: g.webhookSecret,
+            saweriaToken:  !!g.saweriaToken,
+            socialbuzzToken: !!g.socialbuzzToken,
+            lastActive:    rows[0]?.updated_at || null,
             donationCount: parseInt(stats[0]?.cnt || 0),
             donationTotal: parseInt(stats[0]?.total || 0)
         };
@@ -390,7 +433,7 @@ app.post('/api/admin/reset-password', async (req, res) => {
     const { token, gameId, newPassword } = req.body;
     if (!adminFromToken(token || '')) return res.status(401).json({ success: false, error: 'Unauthorized' });
     if (!newPassword || newPassword.length < 6) return res.json({ success: false, error: 'Password minimal 6 karakter' });
-    const game = GAMES.find(g => g.id === gameId);
+    const game = await dbGetGameById(gameId);
     if (!game) return res.json({ success: false, error: 'Game tidak ditemukan' });
     await dbSetPassword(gameId, newPassword);
     res.json({ success: true, message: 'Password berhasil direset' });
@@ -403,13 +446,92 @@ app.get('/api/admin/donations', async (req, res) => {
     const limit  = Math.min(parseInt(req.query.limit) || 50, 200);
     const offset = parseInt(req.query.offset) || 0;
     const search = req.query.search || '';
-    const game   = GAMES.find(g => g.id === gameId);
+    const game   = await dbGetGameById(gameId);
     if (!game) return res.json({ success: false, error: 'Game tidak ditemukan' });
     const [rows, total] = await Promise.all([
         dbGetDonations(gameId, { limit, offset, search }),
         dbCountDonations(gameId, search)
     ]);
     res.json({ success: true, donations: rows, total });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  API — admin game management (ADD / EDIT / DELETE)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Add new game
+app.post('/api/admin/games', async (req, res) => {
+    const { token, name, universeId, apiKey, topic, webhookSecret, password, saweriaToken, socialbuzzToken } = req.body;
+    if (!adminFromToken(token || '')) return res.status(401).json({ success: false, error: 'Unauthorized' });
+    if (!name || !universeId || !apiKey || !password)
+        return res.json({ success: false, error: 'Field wajib: name, universeId, apiKey, password' });
+    if (password.length < 6)
+        return res.json({ success: false, error: 'Password minimal 6 karakter' });
+
+    const gameId = generateGameId();
+    const secret = webhookSecret?.trim() || generateSecret(name);
+
+    // Check duplicate secret
+    const existing = await dbGetGameBySecret(secret).catch(() => null);
+    if (existing) return res.json({ success: false, error: 'Webhook secret sudah dipakai, gunakan yang lain' });
+
+    const game = {
+        id:              gameId,
+        name:            name.trim(),
+        universeId:      universeId.trim(),
+        apiKey:          apiKey.trim(),
+        topic:           topic?.trim() || 'ArchieDonationIDR',
+        webhookSecret:   secret,
+        saweriaToken:    saweriaToken?.trim() || null,
+        socialbuzzToken: socialbuzzToken?.trim() || null
+    };
+
+    try {
+        await dbAddGame(game);
+        await dbSetPassword(gameId, password);
+        console.log(`✅ Game baru ditambahkan: ${game.name} (${gameId})`);
+        res.json({ success: true, game: { ...game, webhookSecret: secret } });
+    } catch (e) {
+        console.error('❌ Gagal tambah game:', e.message);
+        if (e.code === '23505') return res.json({ success: false, error: 'ID atau webhook secret duplikat' });
+        res.json({ success: false, error: 'Gagal menyimpan game' });
+    }
+});
+
+// Edit game
+app.put('/api/admin/games/:gameId', async (req, res) => {
+    const { token, name, universeId, apiKey, topic, saweriaToken, socialbuzzToken } = req.body;
+    if (!adminFromToken(token || '')) return res.status(401).json({ success: false, error: 'Unauthorized' });
+    const game = await dbGetGameById(req.params.gameId);
+    if (!game) return res.json({ success: false, error: 'Game tidak ditemukan' });
+    try {
+        await dbUpdateGame(req.params.gameId, {
+            name:             name?.trim()            || game.name,
+            universe_id:      universeId?.trim()      || game.universeId,
+            api_key:          apiKey?.trim()           || game.apiKey,
+            topic:            topic?.trim()            || game.topic,
+            saweria_token:    saweriaToken?.trim()     || null,
+            socialbuzz_token: socialbuzzToken?.trim()  || null
+        });
+        res.json({ success: true });
+    } catch (e) {
+        res.json({ success: false, error: 'Gagal update game' });
+    }
+});
+
+// Delete game
+app.delete('/api/admin/games/:gameId', async (req, res) => {
+    const token = req.query.token || req.body?.token;
+    if (!adminFromToken(token || '')) return res.status(401).json({ success: false, error: 'Unauthorized' });
+    const game = await dbGetGameById(req.params.gameId);
+    if (!game) return res.json({ success: false, error: 'Game tidak ditemukan' });
+    try {
+        await dbDeleteGame(req.params.gameId);
+        console.log(`🗑️ Game dihapus: ${game.name} (${req.params.gameId})`);
+        res.json({ success: true, message: `Game "${game.name}" berhasil dihapus` });
+    } catch (e) {
+        res.json({ success: false, error: 'Gagal menghapus game' });
+    }
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -518,45 +640,36 @@ app.get('/dashboard', async (req, res) => {
     *{margin:0;padding:0;box-sizing:border-box}
     body{font-family:'Segoe UI',system-ui,sans-serif;background:#0a0e27;color:#fff;min-height:100vh;padding:20px}
     .container{max-width:1100px;margin:0 auto}
-    /* ─ header ─ */
     .header{background:linear-gradient(135deg,rgba(139,92,246,.2),rgba(59,130,246,.2));border:1px solid rgba(139,92,246,.3);border-radius:20px;padding:28px 32px;margin-bottom:28px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px}
     .header h1{font-size:28px;background:linear-gradient(135deg,#8b5cf6,#3b82f6);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
     .header p{color:#94a3b8;font-size:13px;margin-top:4px}
     .hbtns{display:flex;gap:10px;flex-wrap:wrap}
-    /* ─ nav tabs ─ */
     .nav{display:flex;gap:10px;margin-bottom:24px;border-bottom:1px solid rgba(139,92,246,.15);padding-bottom:0}
     .ntab{padding:10px 20px;background:none;border:none;border-bottom:2px solid transparent;color:#94a3b8;font-size:14px;font-weight:600;cursor:pointer;transition:all .3s;border-radius:8px 8px 0 0}
     .ntab.active{color:#8b5cf6;border-bottom-color:#8b5cf6;background:rgba(139,92,246,.1)}
     .ntab:hover{color:#8b5cf6}
     .page{display:none}.page.active{display:block}
-    /* ─ card ─ */
     .card{background:rgba(15,23,42,.8);border:1px solid rgba(139,92,246,.2);border-radius:16px;padding:24px;margin-bottom:20px;backdrop-filter:blur(10px)}
     .card h3{color:#8b5cf6;font-size:17px;margin-bottom:18px;display:flex;align-items:center;gap:8px}
-    /* ─ stat grid ─ */
     .sgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:20px}
     .scard{background:rgba(15,23,42,.8);border:1px solid rgba(139,92,246,.2);border-radius:14px;padding:20px;text-align:center}
     .scard .sv{font-size:30px;font-weight:700;background:linear-gradient(135deg,#8b5cf6,#3b82f6);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:6px}
     .scard .sl{color:#94a3b8;font-size:12px;font-weight:500;text-transform:uppercase;letter-spacing:.5px}
-    /* ─ info row ─ */
     .ir{display:flex;justify-content:space-between;padding:11px 0;border-bottom:1px solid rgba(139,92,246,.08);align-items:center;font-size:14px}
     .ir:last-child{border:none}
     .il{color:#94a3b8}.iv{color:#fff;font-weight:500}
-    /* ─ url box ─ */
     .ub{background:rgba(0,0,0,.3);border:1px solid rgba(139,92,246,.2);border-radius:10px;padding:14px;margin:10px 0}
     .ul{color:#8b5cf6;font-size:12px;font-weight:600;text-transform:uppercase;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center}
     .ut{color:#10b981;font-family:'Courier New',monospace;font-size:12px;word-break:break-all;padding:10px;background:rgba(0,0,0,.4);border-radius:6px}
-    /* ─ buttons ─ */
     .btn{padding:9px 18px;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;transition:all .3s;display:inline-flex;align-items:center;gap:5px;background:linear-gradient(135deg,#8b5cf6,#3b82f6);color:#fff}
     .btn:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(139,92,246,.4)}
     .btn-sm{padding:6px 14px;font-size:12px}
     .btn-sec{background:rgba(139,92,246,.2);border:1px solid rgba(139,92,246,.4)}
     .btn-sec:hover{background:rgba(139,92,246,.3)}
-    /* ─ badge ─ */
     .badge{display:inline-block;padding:3px 10px;border-radius:10px;font-size:12px;font-weight:600}
     .bs{background:rgba(16,185,129,.15);color:#10b981;border:1px solid rgba(16,185,129,.3)}
     .bw{background:rgba(245,158,11,.15);color:#f59e0b;border:1px solid rgba(245,158,11,.3)}
     .bp{background:rgba(139,92,246,.15);color:#8b5cf6;border:1px solid rgba(139,92,246,.3)}
-    /* ─ table ─ */
     .tbl-wrap{overflow-x:auto}
     table{width:100%;border-collapse:collapse;font-size:13px}
     thead{background:rgba(139,92,246,.1)}
@@ -564,20 +677,16 @@ app.get('/dashboard', async (req, res) => {
     td{padding:12px 14px;color:#cbd5e1;border-bottom:1px solid rgba(139,92,246,.08)}
     tr:last-child td{border:none}
     tr:hover td{background:rgba(139,92,246,.04)}
-    /* ─ search bar ─ */
     .sbar{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap}
     .sbar input{flex:1;min-width:180px;padding:10px 14px;background:rgba(15,23,42,.6);border:1.5px solid rgba(139,92,246,.2);border-radius:8px;color:#fff;font-size:13px;outline:none}
     .sbar input:focus{border-color:#8b5cf6}
-    /* ─ pagination ─ */
     .pag{display:flex;justify-content:center;align-items:center;gap:8px;margin-top:16px;font-size:13px}
     .pag button{padding:6px 14px;font-size:12px}
     .pag span{color:#94a3b8}
-    /* ─ chart bar ─ */
     .chart{display:flex;align-items:flex-end;gap:6px;height:80px;margin-top:8px}
     .bar-wrap{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px}
     .bar{width:100%;background:linear-gradient(to top,#8b5cf6,#3b82f6);border-radius:4px 4px 0 0;min-height:2px;transition:height .5s}
     .bar-label{color:#64748b;font-size:10px;text-align:center}
-    /* ─ modal ─ */
     .modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(5px);z-index:1000;justify-content:center;align-items:center;padding:20px}
     .modal.active{display:flex}
     .mc{background:rgba(15,23,42,.95);border:1px solid rgba(139,92,246,.3);border-radius:20px;padding:32px;max-width:480px;width:100%;animation:mfade .3s}
@@ -591,7 +700,6 @@ app.get('/dashboard', async (req, res) => {
     .fg input{width:100%;padding:11px 14px;background:rgba(15,23,42,.6);border:2px solid rgba(139,92,246,.2);border-radius:9px;color:#fff;font-size:14px;outline:none;transition:all .3s}
     .fg input:focus{border-color:#8b5cf6}
     .mf{display:flex;gap:10px;justify-content:flex-end;margin-top:20px}
-    /* ─ toast ─ */
     .toast{position:fixed;top:20px;right:20px;padding:14px 22px;border-radius:12px;font-weight:600;display:none;z-index:2000;animation:slideIn .3s}
     @keyframes slideIn{from{transform:translateX(400px);opacity:0}to{transform:translateX(0);opacity:1}}
     .tOk{background:rgba(16,185,129,.9);color:#fff}
@@ -603,7 +711,6 @@ app.get('/dashboard', async (req, res) => {
 <div class="toast tOk" id="tOk"></div>
 <div class="toast tErr" id="tErr"></div>
 
-<!-- Change Password Modal -->
 <div class="modal" id="cpModal">
   <div class="mc">
     <div class="mh"><h2>🔐 Ganti Password</h2><button class="xbtn" onclick="closeModal()">×</button></div>
@@ -621,34 +728,25 @@ app.get('/dashboard', async (req, res) => {
 
 <div class="container">
   <div class="header">
-    <div>
-      <h1>🎮 ${game.name}</h1>
-      <p>Webhook Integration Dashboard</p>
-    </div>
+    <div><h1>🎮 ${game.name}</h1><p>Webhook Integration Dashboard</p></div>
     <div class="hbtns">
       <button class="btn btn-sec" onclick="document.getElementById('cpModal').classList.add('active')">🔑 Ganti Password</button>
       <button class="btn btn-sec" onclick="location.href='/'">🚪 Logout</button>
     </div>
   </div>
-
   <div class="nav">
     <button class="ntab active" onclick="switchPage('overview')">📊 Overview</button>
     <button class="ntab" onclick="switchPage('history')">📜 History Donasi</button>
     <button class="ntab" onclick="switchPage('leaderboard')">🏆 Leaderboard</button>
     <button class="ntab" onclick="switchPage('settings')">⚙️ Settings</button>
   </div>
-
-  <!-- OVERVIEW -->
   <div class="page active" id="p-overview">
     <div class="sgrid" id="statCards">
       <div class="scard"><div class="sv" id="sTotalAmount">—</div><div class="sl">Total Donasi</div></div>
       <div class="scard"><div class="sv" id="sTotalCount">—</div><div class="sl">Jumlah Transaksi</div></div>
       <div class="scard"><div class="sv" id="sUniqueDonors">—</div><div class="sl">Donatur Unik</div></div>
     </div>
-    <div class="card">
-      <h3>📈 Donasi 7 Hari Terakhir</h3>
-      <div class="chart" id="weekChart"><p style="color:#64748b;font-size:13px">Loading…</p></div>
-    </div>
+    <div class="card"><h3>📈 Donasi 7 Hari Terakhir</h3><div class="chart" id="weekChart"><p style="color:#64748b;font-size:13px">Loading…</p></div></div>
     <div class="card">
       <h3>📋 Informasi Game</h3>
       <div class="ir"><span class="il">Universe ID</span><span class="iv">${game.universeId}</span></div>
@@ -657,8 +755,6 @@ app.get('/dashboard', async (req, res) => {
       <div class="ir"><span class="il">SocialBuzz Token</span><span class="iv"><span class="badge ${game.socialbuzzToken ? 'bs' : 'bw'}">${game.socialbuzzToken ? '✓ Set' : '⚠ Optional'}</span></span></div>
     </div>
   </div>
-
-  <!-- HISTORY -->
   <div class="page" id="p-history">
     <div class="card">
       <h3>📜 History Donasi</h3>
@@ -676,8 +772,6 @@ app.get('/dashboard', async (req, res) => {
       <div class="pag" id="pagination"></div>
     </div>
   </div>
-
-  <!-- LEADERBOARD -->
   <div class="page" id="p-leaderboard">
     <div class="card">
       <h3>🏆 Top Donatur</h3>
@@ -689,24 +783,13 @@ app.get('/dashboard', async (req, res) => {
       </div>
     </div>
   </div>
-
-  <!-- SETTINGS -->
   <div class="page" id="p-settings">
     <div class="card">
       <h3>🔗 Webhook URLs</h3>
-      <p style="color:#94a3b8;font-size:13px;margin-bottom:18px">Gunakan URL berikut di Saweria / SocialBuzz. Klik Copy untuk menyalin.</p>
-      <div class="ub">
-        <div class="ul"><span>📡 Saweria Webhook</span><button class="btn btn-sm" onclick="copy('sawURL')">📋 Copy</button></div>
-        <div class="ut" id="sawURL">${baseUrl}/${game.webhookSecret}/saweria</div>
-      </div>
-      <div class="ub">
-        <div class="ul"><span>📡 SocialBuzz Webhook</span><button class="btn btn-sm" onclick="copy('sbURL')">📋 Copy</button></div>
-        <div class="ut" id="sbURL">${baseUrl}/${game.webhookSecret}/socialbuzz</div>
-      </div>
-      <div class="ub">
-        <div class="ul"><span>🧪 Test Endpoint</span><button class="btn btn-sm" onclick="copy('testURL')">📋 Copy</button></div>
-        <div class="ut" id="testURL">${baseUrl}/${game.webhookSecret}/test?password=${encodeURIComponent(password)}</div>
-      </div>
+      <p style="color:#94a3b8;font-size:13px;margin-bottom:18px">Gunakan URL berikut di Saweria / SocialBuzz.</p>
+      <div class="ub"><div class="ul"><span>📡 Saweria Webhook</span><button class="btn btn-sm" onclick="copy('sawURL')">📋 Copy</button></div><div class="ut" id="sawURL">${baseUrl}/${game.webhookSecret}/saweria</div></div>
+      <div class="ub"><div class="ul"><span>📡 SocialBuzz Webhook</span><button class="btn btn-sm" onclick="copy('sbURL')">📋 Copy</button></div><div class="ut" id="sbURL">${baseUrl}/${game.webhookSecret}/socialbuzz</div></div>
+      <div class="ub"><div class="ul"><span>🧪 Test Endpoint</span><button class="btn btn-sm" onclick="copy('testURL')">📋 Copy</button></div><div class="ut" id="testURL">${baseUrl}/${game.webhookSecret}/test?password=${encodeURIComponent(password)}</div></div>
     </div>
     <div class="card">
       <h3>💡 Format Username</h3>
@@ -718,25 +801,12 @@ app.get('/dashboard', async (req, res) => {
       </div>
     </div>
   </div>
-</div><!-- /container -->
+</div>
 
 <script>
 const PWD = ${JSON.stringify(password)};
-let donPage = 0, donTotal = 0, donLimit = 50, searchTimer = null;
-
-// ─ navigation ─
-function switchPage(id) {
-  document.querySelectorAll('.ntab').forEach(t=>t.classList.remove('active'));
-  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
-  const idx = {overview:0,history:1,leaderboard:2,settings:3}[id];
-  document.querySelectorAll('.ntab')[idx].classList.add('active');
-  document.getElementById('p-'+id).classList.add('active');
-  if(id==='history' && document.getElementById('donTbody').innerHTML.includes('Loading')) loadDonations(0);
-  if(id==='leaderboard' && document.getElementById('lbTbody').innerHTML.includes('Loading')) loadLeaderboard();
-  if(id==='overview' && document.getElementById('sTotalAmount').textContent==='—') loadStats();
-}
-
-// ─ utils ─
+let donPage=0,donTotal=0,donLimit=50,searchTimer=null;
+function switchPage(id){document.querySelectorAll('.ntab').forEach(t=>t.classList.remove('active'));document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));const idx={overview:0,history:1,leaderboard:2,settings:3}[id];document.querySelectorAll('.ntab')[idx].classList.add('active');document.getElementById('p-'+id).classList.add('active');if(id==='history'&&document.getElementById('donTbody').innerHTML.includes('Loading'))loadDonations(0);if(id==='leaderboard'&&document.getElementById('lbTbody').innerHTML.includes('Loading'))loadLeaderboard();if(id==='overview'&&document.getElementById('sTotalAmount').textContent==='—')loadStats();}
 function fmt(n){return new Intl.NumberFormat('id-ID',{style:'currency',currency:'IDR',minimumFractionDigits:0}).format(n)}
 function fmtDate(s){return new Date(s).toLocaleString('id-ID',{dateStyle:'short',timeStyle:'short'})}
 function toast(msg,ok=true){const el=document.getElementById(ok?'tOk':'tErr');el.textContent=msg;el.style.display='block';setTimeout(()=>el.style.display='none',3000)}
@@ -744,118 +814,13 @@ function copy(id){navigator.clipboard.writeText(document.getElementById(id).text
 function sourceBadge(s){const m={Saweria:'bs',SocialBuzz:'bp',Test:'bw'};return '<span class="badge '+(m[s]||'bw')+'">'+s+'</span>'}
 function closeModal(){document.getElementById('cpModal').classList.remove('active')}
 function debounceSearch(){clearTimeout(searchTimer);searchTimer=setTimeout(()=>loadDonations(0),400)}
-
-// ─ stats ─
-async function loadStats() {
-  try {
-    const r = await fetch('/api/user/donations/stats?password='+encodeURIComponent(PWD));
-    const d = await r.json();
-    if(!d.success) return;
-    document.getElementById('sTotalAmount').textContent = fmt(d.totals.total_amount||0);
-    document.getElementById('sTotalCount').textContent  = (d.totals.total_donations||0).toLocaleString();
-    document.getElementById('sUniqueDonors').textContent= (d.totals.unique_donors||0).toLocaleString();
-    // week chart
-    const days = d.recent7 || [];
-    if(days.length===0){document.getElementById('weekChart').innerHTML='<p style="color:#64748b;font-size:13px">Belum ada data minggu ini</p>';return;}
-    const max = Math.max(...days.map(x=>parseInt(x.amount)||0), 1);
-    document.getElementById('weekChart').innerHTML = days.map(day=>{
-      const pct = Math.max(4, Math.round((parseInt(day.amount)||0)/max*100));
-      const label = new Date(day.day).toLocaleDateString('id-ID',{weekday:'short',day:'numeric'});
-      return \`<div class="bar-wrap"><div class="bar" style="height:\${pct}%" title="\${fmt(day.amount)}"></div><div class="bar-label">\${label}</div></div>\`;
-    }).join('');
-  } catch(e){ console.error(e); }
-}
-
-// ─ donations table ─
-async function loadDonations(offset=0) {
-  donPage = offset;
-  const search = document.getElementById('searchInput').value.trim();
-  const tbody = document.getElementById('donTbody');
-  tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px;color:#64748b">Loading…</td></tr>';
-  try {
-    const url = \`/api/user/donations?password=\${encodeURIComponent(PWD)}&limit=\${donLimit}&offset=\${offset}&search=\${encodeURIComponent(search)}\`;
-    const r = await fetch(url);
-    const d = await r.json();
-    if(!d.success){tbody.innerHTML='<tr><td colspan="7" style="text-align:center;color:#ef4444">Error loading data</td></tr>';return;}
-    donTotal = d.total;
-    if(!d.donations.length){tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:30px;color:#64748b">Belum ada donasi</td></tr>';renderPagination();return;}
-    tbody.innerHTML = d.donations.map((don,i)=>\`
-      <tr>
-        <td style="color:#64748b">\${offset+i+1}</td>
-        <td style="white-space:nowrap">\${fmtDate(don.donated_at)}</td>
-        <td><strong style="color:#10b981">\${don.username}</strong></td>
-        <td style="color:#94a3b8">\${don.display_name||'—'}</td>
-        <td>\${sourceBadge(don.source||'?')}</td>
-        <td><strong>\${fmt(don.amount)}</strong></td>
-        <td style="color:#94a3b8;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="\${(don.message||'').replace(/"/g,'&quot;')}">\${don.message||'—'}</td>
-      </tr>\`).join('');
-    renderPagination();
-  } catch(e){ tbody.innerHTML='<tr><td colspan="7" style="text-align:center;color:#ef4444">Connection error</td></tr>'; }
-}
-
-function renderPagination() {
-  const total = donTotal, pages = Math.ceil(total/donLimit), cur = Math.floor(donPage/donLimit);
-  const el = document.getElementById('pagination');
-  if(pages<=1){el.innerHTML='';return;}
-  el.innerHTML = \`
-    <button class="btn btn-sm btn-sec" \${cur===0?'disabled':''} onclick="loadDonations(\${(cur-1)*donLimit})">‹ Prev</button>
-    <span>\${cur+1} / \${pages} (Total: \${total.toLocaleString()})</span>
-    <button class="btn btn-sm btn-sec" \${cur>=pages-1?'disabled':''} onclick="loadDonations(\${(cur+1)*donLimit})">Next ›</button>
-  \`;
-}
-
-// ─ leaderboard ─
-async function loadLeaderboard() {
-  const tbody = document.getElementById('lbTbody');
-  try {
-    const r = await fetch('/api/user/donations/stats?password='+encodeURIComponent(PWD));
-    const d = await r.json();
-    if(!d.success||!d.byUser.length){tbody.innerHTML='<tr><td colspan="6" style="text-align:center;padding:30px;color:#64748b">Belum ada data</td></tr>';return;}
-    const medals = ['🥇','🥈','🥉'];
-    tbody.innerHTML = d.byUser.map((u,i)=>\`
-      <tr>
-        <td><strong style="font-size:18px">\${medals[i]||('#'+(i+1))}</strong></td>
-        <td><strong style="color:#10b981">\${u.username}</strong></td>
-        <td style="color:#94a3b8">\${u.display_name||'—'}</td>
-        <td><span class="badge bp">\${u.donation_count}×</span></td>
-        <td><strong style="color:#f59e0b">\${fmt(u.total_amount)}</strong></td>
-        <td style="color:#64748b;font-size:12px">\${fmtDate(u.last_donation)}</td>
-      </tr>\`).join('');
-  } catch(e){ tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:#ef4444">Error</td></tr>'; }
-}
-
-// ─ export CSV ─
-async function exportCSV() {
-  try {
-    toast('Mengambil data untuk export…');
-    const r = await fetch(\`/api/user/donations?password=\${encodeURIComponent(PWD)}&limit=5000&offset=0\`);
-    const d = await r.json();
-    if(!d.success) return toast('Gagal export','err');
-    const header = 'No,Waktu,Username,Nama,Platform,Jumlah,Pesan';
-    const rows = d.donations.map((x,i)=>[i+1,new Date(x.donated_at).toISOString(),x.username,x.display_name,x.source,x.amount,(x.message||'').replace(/,/g,' ')].join(','));
-    const csv = [header,...rows].join('\\n');
-    const blob = new Blob([csv],{type:'text/csv'});
-    const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='donasi_'+Date.now()+'.csv'; a.click();
-    toast('Export berhasil!');
-  } catch(e){ toast('Gagal export','err'); }
-}
-
-// ─ change password ─
-document.getElementById('cpForm').addEventListener('submit', async e=>{
-  e.preventDefault();
-  const cur = document.getElementById('cpCur').value;
-  const nw  = document.getElementById('cpNew').value;
-  const con = document.getElementById('cpCon').value;
-  if(nw!==con) return toast('Password baru tidak cocok','err');
-  if(nw.length<6) return toast('Minimal 6 karakter','err');
-  const r = await fetch('/api/user/change-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({currentPassword:cur,newPassword:nw})});
-  const d = await r.json();
-  if(d.success){toast('Password berhasil diubah! Redirecting…');setTimeout(()=>location.href='/dashboard?password='+encodeURIComponent(nw),2000);}
-  else toast(d.error||'Gagal','err');
-});
+async function loadStats(){try{const r=await fetch('/api/user/donations/stats?password='+encodeURIComponent(PWD));const d=await r.json();if(!d.success)return;document.getElementById('sTotalAmount').textContent=fmt(d.totals.total_amount||0);document.getElementById('sTotalCount').textContent=(d.totals.total_donations||0).toLocaleString();document.getElementById('sUniqueDonors').textContent=(d.totals.unique_donors||0).toLocaleString();const days=d.recent7||[];if(!days.length){document.getElementById('weekChart').innerHTML='<p style="color:#64748b;font-size:13px">Belum ada data minggu ini</p>';return;}const max=Math.max(...days.map(x=>parseInt(x.amount)||0),1);document.getElementById('weekChart').innerHTML=days.map(day=>{const pct=Math.max(4,Math.round((parseInt(day.amount)||0)/max*100));const label=new Date(day.day).toLocaleDateString('id-ID',{weekday:'short',day:'numeric'});return \`<div class="bar-wrap"><div class="bar" style="height:\${pct}%" title="\${fmt(day.amount)}"></div><div class="bar-label">\${label}</div></div>\`;}).join('');}catch(e){console.error(e);}}
+async function loadDonations(offset=0){donPage=offset;const search=document.getElementById('searchInput').value.trim();const tbody=document.getElementById('donTbody');tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:24px;color:#64748b">Loading…</td></tr>';try{const url=\`/api/user/donations?password=\${encodeURIComponent(PWD)}&limit=\${donLimit}&offset=\${offset}&search=\${encodeURIComponent(search)}\`;const r=await fetch(url);const d=await r.json();if(!d.success){tbody.innerHTML='<tr><td colspan="7" style="text-align:center;color:#ef4444">Error loading data</td></tr>';return;}donTotal=d.total;if(!d.donations.length){tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:30px;color:#64748b">Belum ada donasi</td></tr>';renderPagination();return;}tbody.innerHTML=d.donations.map((don,i)=>\`<tr><td style="color:#64748b">\${offset+i+1}</td><td style="white-space:nowrap">\${fmtDate(don.donated_at)}</td><td><strong style="color:#10b981">\${don.username}</strong></td><td style="color:#94a3b8">\${don.display_name||'—'}</td><td>\${sourceBadge(don.source||'?')}</td><td><strong>\${fmt(don.amount)}</strong></td><td style="color:#94a3b8;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="\${(don.message||'').replace(/"/g,'&quot;')}">\${don.message||'—'}</td></tr>\`).join('');renderPagination();}catch(e){tbody.innerHTML='<tr><td colspan="7" style="text-align:center;color:#ef4444">Connection error</td></tr>';}}
+function renderPagination(){const total=donTotal,pages=Math.ceil(total/donLimit),cur=Math.floor(donPage/donLimit);const el=document.getElementById('pagination');if(pages<=1){el.innerHTML='';return;}el.innerHTML=\`<button class="btn btn-sm btn-sec" \${cur===0?'disabled':''} onclick="loadDonations(\${(cur-1)*donLimit})">‹ Prev</button><span>\${cur+1} / \${pages} (Total: \${total.toLocaleString()})</span><button class="btn btn-sm btn-sec" \${cur>=pages-1?'disabled':''} onclick="loadDonations(\${(cur+1)*donLimit})">Next ›</button>\`;}
+async function loadLeaderboard(){const tbody=document.getElementById('lbTbody');try{const r=await fetch('/api/user/donations/stats?password='+encodeURIComponent(PWD));const d=await r.json();if(!d.success||!d.byUser.length){tbody.innerHTML='<tr><td colspan="6" style="text-align:center;padding:30px;color:#64748b">Belum ada data</td></tr>';return;}const medals=['🥇','🥈','🥉'];tbody.innerHTML=d.byUser.map((u,i)=>\`<tr><td><strong style="font-size:18px">\${medals[i]||('#'+(i+1))}</strong></td><td><strong style="color:#10b981">\${u.username}</strong></td><td style="color:#94a3b8">\${u.display_name||'—'}</td><td><span class="badge bp">\${u.donation_count}×</span></td><td><strong style="color:#f59e0b">\${fmt(u.total_amount)}</strong></td><td style="color:#64748b;font-size:12px">\${fmtDate(u.last_donation)}</td></tr>\`).join('');}catch(e){tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:#ef4444">Error</td></tr>';}}
+async function exportCSV(){try{toast('Mengambil data untuk export…');const r=await fetch(\`/api/user/donations?password=\${encodeURIComponent(PWD)}&limit=5000&offset=0\`);const d=await r.json();if(!d.success)return toast('Gagal export','err');const header='No,Waktu,Username,Nama,Platform,Jumlah,Pesan';const rows=d.donations.map((x,i)=>[i+1,new Date(x.donated_at).toISOString(),x.username,x.display_name,x.source,x.amount,(x.message||'').replace(/,/g,' ')].join(','));const csv=[header,...rows].join('\n');const blob=new Blob([csv],{type:'text/csv'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='donasi_'+Date.now()+'.csv';a.click();toast('Export berhasil!');}catch(e){toast('Gagal export','err');}}
+document.getElementById('cpForm').addEventListener('submit',async e=>{e.preventDefault();const cur=document.getElementById('cpCur').value;const nw=document.getElementById('cpNew').value;const con=document.getElementById('cpCon').value;if(nw!==con)return toast('Password baru tidak cocok','err');if(nw.length<6)return toast('Minimal 6 karakter','err');const r=await fetch('/api/user/change-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({currentPassword:cur,newPassword:nw})});const d=await r.json();if(d.success){toast('Password berhasil diubah! Redirecting…');setTimeout(()=>location.href='/dashboard?password='+encodeURIComponent(nw),2000);}else toast(d.error||'Gagal','err');});
 document.getElementById('cpModal').addEventListener('click',e=>{if(e.target.id==='cpModal')closeModal();});
-
-// init
 loadStats();
 </script>
 </body></html>`);
@@ -885,7 +850,7 @@ app.get('/admin/dashboard', (req, res) => {
     .scard .sv{font-size:32px;font-weight:700;background:linear-gradient(135deg,#8b5cf6,#3b82f6);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:6px}
     .scard .sl{color:#94a3b8;font-size:12px;text-transform:uppercase;letter-spacing:.5px}
     .card{background:rgba(15,23,42,.8);border:1px solid rgba(139,92,246,.2);border-radius:16px;padding:24px;margin-bottom:20px}
-    .card h2{color:#8b5cf6;font-size:20px;margin-bottom:20px}
+    .card h2{color:#8b5cf6;font-size:20px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px}
     .tbl-wrap{overflow-x:auto}
     table{width:100%;border-collapse:collapse;font-size:13px}
     thead{background:rgba(139,92,246,.1)}
@@ -896,54 +861,147 @@ app.get('/admin/dashboard', (req, res) => {
     .btn{padding:8px 16px;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;transition:all .3s;display:inline-flex;align-items:center;gap:5px;background:linear-gradient(135deg,#8b5cf6,#3b82f6);color:#fff}
     .btn:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(139,92,246,.4)}
     .btn-d{background:linear-gradient(135deg,#ef4444,#dc2626)}
+    .btn-d:hover{box-shadow:0 4px 12px rgba(239,68,68,.4)}
+    .btn-g{background:linear-gradient(135deg,#10b981,#059669)}
+    .btn-g:hover{box-shadow:0 4px 12px rgba(16,185,129,.4)}
     .btn-sec{background:rgba(139,92,246,.2);border:1px solid rgba(139,92,246,.4)}
+    .btn-warn{background:linear-gradient(135deg,#f59e0b,#d97706)}
     .badge{display:inline-block;padding:3px 10px;border-radius:10px;font-size:12px;font-weight:600}
     .bs{background:rgba(16,185,129,.15);color:#10b981;border:1px solid rgba(16,185,129,.3)}
     .bp{background:rgba(139,92,246,.15);color:#8b5cf6;border:1px solid rgba(139,92,246,.3)}
-    .modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(5px);z-index:1000;justify-content:center;align-items:center;padding:20px}
+    .bw{background:rgba(245,158,11,.15);color:#f59e0b;border:1px solid rgba(245,158,11,.3)}
+    /* Modal */
+    .modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);backdrop-filter:blur(6px);z-index:1000;justify-content:center;align-items:center;padding:20px;overflow-y:auto}
     .modal.active{display:flex}
-    .mc{background:rgba(15,23,42,.95);border:1px solid rgba(139,92,246,.3);border-radius:20px;padding:32px;max-width:480px;width:100%}
-    .mh{display:flex;justify-content:space-between;align-items:center;margin-bottom:22px}
+    .mc{background:rgba(10,14,39,.97);border:1px solid rgba(139,92,246,.35);border-radius:20px;padding:32px;max-width:560px;width:100%;margin:auto;animation:mfade .3s}
+    @keyframes mfade{from{opacity:0;transform:scale(.93)}to{opacity:1;transform:scale(1)}}
+    .mh{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px}
     .mh h2{color:#8b5cf6;font-size:22px}
     .xbtn{background:none;border:none;color:#94a3b8;font-size:22px;cursor:pointer;width:30px;height:30px;display:flex;align-items:center;justify-content:center;border-radius:6px;transition:all .3s}
     .xbtn:hover{background:rgba(139,92,246,.2);color:#8b5cf6}
     .fg{margin-bottom:16px}
-    .fg label{display:block;color:#cbd5e1;font-size:14px;font-weight:500;margin-bottom:7px}
-    .fg input{width:100%;padding:11px 14px;background:rgba(15,23,42,.6);border:2px solid rgba(139,92,246,.2);border-radius:9px;color:#fff;font-size:14px;outline:none;transition:all .3s}
-    .fg input:focus{border-color:#8b5cf6}
-    .mf{display:flex;gap:10px;justify-content:flex-end;margin-top:20px}
-    .toast{position:fixed;top:20px;right:20px;padding:14px 22px;border-radius:12px;font-weight:600;display:none;z-index:2000}
-    .tOk{background:rgba(16,185,129,.9);color:#fff}
-    .tErr{background:rgba(239,68,68,.9);color:#fff}
-    /* donation panel */
+    .fg label{display:block;color:#cbd5e1;font-size:13px;font-weight:600;margin-bottom:6px}
+    .fg label span{color:#64748b;font-weight:400;font-size:12px}
+    .fg input,.fg select{width:100%;padding:11px 14px;background:rgba(15,23,42,.7);border:2px solid rgba(139,92,246,.2);border-radius:9px;color:#fff;font-size:14px;outline:none;transition:all .3s}
+    .fg input:focus,.fg select:focus{border-color:#8b5cf6;box-shadow:0 0 0 3px rgba(139,92,246,.12)}
+    .fg input::placeholder{color:#475569}
+    .fg .hint{color:#475569;font-size:11px;margin-top:5px}
+    .fg select option{background:#0a0e27}
+    .fgrow{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+    .divider{border:none;border-top:1px solid rgba(139,92,246,.12);margin:18px 0}
+    .section-label{color:#64748b;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;margin-bottom:12px}
+    .mf{display:flex;gap:10px;justify-content:flex-end;margin-top:22px;flex-wrap:wrap}
+    /* Toast */
+    .toast{position:fixed;top:20px;right:20px;padding:14px 22px;border-radius:12px;font-weight:600;display:none;z-index:2000;max-width:340px;line-height:1.4}
+    .tOk{background:rgba(16,185,129,.95);color:#fff}
+    .tErr{background:rgba(239,68,68,.95);color:#fff}
+    /* Donation panel */
     .don-panel{background:rgba(15,23,42,.6);border:1px solid rgba(139,92,246,.15);border-radius:12px;padding:20px;margin-top:12px}
-    .don-panel table th{font-size:11px}
+    /* Confirm overlay */
+    .confirm{display:none;position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:2000;justify-content:center;align-items:center;padding:20px}
+    .confirm.active{display:flex}
+    .confirm-box{background:rgba(10,14,39,.97);border:1px solid rgba(239,68,68,.3);border-radius:16px;padding:28px;max-width:380px;width:100%;text-align:center}
+    .confirm-box h3{color:#ef4444;margin-bottom:10px;font-size:18px}
+    .confirm-box p{color:#94a3b8;font-size:14px;margin-bottom:20px;line-height:1.5}
+    .confirm-box .cf{display:flex;gap:10px;justify-content:center}
+    /* Webhook URL display */
+    .wh-url{font-family:'Courier New',monospace;font-size:11px;color:#10b981;background:rgba(0,0,0,.4);padding:8px 10px;border-radius:6px;word-break:break-all;margin-top:4px}
+    .actions-cell{display:flex;gap:6px;flex-wrap:wrap}
   </style>
 </head>
 <body>
 <div class="toast tOk" id="tOk"></div>
 <div class="toast tErr" id="tErr"></div>
 
-<!-- Reset Password Modal -->
-<div class="modal" id="rpModal">
+<!-- Add / Edit Game Modal -->
+<div class="modal" id="gameModal">
   <div class="mc">
-    <div class="mh"><h2>🔐 Reset Password</h2><button class="xbtn" onclick="closeModal()">×</button></div>
-    <form id="rpForm">
-      <input type="hidden" id="rpId">
-      <div class="fg"><label>Game</label><input type="text" id="rpName" readonly style="opacity:.7"></div>
-      <div class="fg"><label>Password Baru</label><input type="text" id="rpPwd" minlength="6" placeholder="Min. 6 karakter" required></div>
+    <div class="mh"><h2 id="gmTitle">➕ Tambah Game Baru</h2><button class="xbtn" onclick="closeGameModal()">×</button></div>
+    <form id="gmForm">
+      <input type="hidden" id="gmId">
+      <input type="hidden" id="gmMode"> <!-- add | edit -->
+
+      <p class="section-label">📌 Informasi Dasar</p>
+      <div class="fgrow">
+        <div class="fg"><label>Nama Game <span>*</span></label><input id="gmName" placeholder="Contoh: My Roblox Game" required></div>
+        <div class="fg"><label>Universe ID <span>*</span></label><input id="gmUid" placeholder="1234567890" required></div>
+      </div>
+      <div class="fg"><label>Roblox API Key <span>*</span></label><input id="gmApiKey" placeholder="roblox_xxxxx..." required></div>
+      <div class="fgrow">
+        <div class="fg">
+          <label>Topic</label>
+          <input id="gmTopic" placeholder="ArchieDonationIDR">
+          <p class="hint">Default: ArchieDonationIDR</p>
+        </div>
+        <div class="fg" id="gmSecretFg">
+          <label>Webhook Secret <span id="gmSecretOptLabel">(auto-generate jika kosong)</span></label>
+          <input id="gmSecret" placeholder="Kosongkan = auto-generate">
+        </div>
+      </div>
+
+      <hr class="divider">
+      <p class="section-label">🔐 Password Akses</p>
+      <div class="fgrow">
+        <div class="fg" id="gmPwdFg">
+          <label>Password <span id="gmPwdLabel">*</span></label>
+          <input type="text" id="gmPwd" placeholder="Min. 6 karakter">
+          <p class="hint" id="gmPwdHint">Password untuk login user dashboard</p>
+        </div>
+        <div class="fg" style="display:flex;align-items:flex-end;padding-bottom:4px">
+          <button type="button" class="btn btn-sec" style="width:100%;justify-content:center" onclick="generatePwd()">🎲 Generate</button>
+        </div>
+      </div>
+
+      <hr class="divider">
+      <p class="section-label">🔗 Token Webhook (Opsional)</p>
+      <div class="fgrow">
+        <div class="fg"><label>Saweria Token <span>(opsional)</span></label><input id="gmSaweria" placeholder="Kosongkan jika tidak pakai"></div>
+        <div class="fg"><label>SocialBuzz Token <span>(opsional)</span></label><input id="gmSocialbuzz" placeholder="Kosongkan jika tidak pakai"></div>
+      </div>
+
       <div class="mf">
-        <button type="button" class="btn btn-sec" onclick="closeModal()">Batal</button>
-        <button type="submit" class="btn btn-d">Reset</button>
+        <button type="button" class="btn btn-sec" onclick="closeGameModal()">Batal</button>
+        <button type="submit" class="btn btn-g" id="gmSubmit">✅ Simpan Game</button>
       </div>
     </form>
   </div>
 </div>
 
+<!-- Reset Password Modal -->
+<div class="modal" id="rpModal">
+  <div class="mc" style="max-width:400px">
+    <div class="mh"><h2>🔑 Reset Password</h2><button class="xbtn" onclick="closeModal('rpModal')">×</button></div>
+    <form id="rpForm">
+      <input type="hidden" id="rpId">
+      <div class="fg"><label>Game</label><input id="rpName" readonly style="opacity:.6"></div>
+      <div class="fg"><label>Password Baru</label><input type="text" id="rpPwd" minlength="6" placeholder="Min. 6 karakter" required></div>
+      <div class="mf">
+        <button type="button" class="btn btn-sec" onclick="closeModal('rpModal')">Batal</button>
+        <button type="submit" class="btn btn-warn">🔑 Reset</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Confirm Delete -->
+<div class="confirm" id="confirmDel">
+  <div class="confirm-box">
+    <h3>⚠️ Hapus Game?</h3>
+    <p id="confirmDelMsg">Yakin ingin menghapus game ini? Password akan dihapus. <strong>Data donasi tetap tersimpan untuk audit.</strong></p>
+    <div class="cf">
+      <button class="btn btn-sec" onclick="closeConfirm()">Batal</button>
+      <button class="btn btn-d" onclick="confirmDeleteGame()">🗑️ Hapus</button>
+    </div>
+  </div>
+</div>
+
 <div class="container">
   <div class="header">
-    <div><h1>🔐 Admin Dashboard</h1><p>User Management & System Overview</p></div>
-    <button class="btn btn-sec" onclick="location.href='/'">🚪 Logout</button>
+    <div><h1>🔐 Admin Dashboard</h1><p>Game Management & System Overview</p></div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <button class="btn btn-sec" onclick="location.reload()">🔄 Refresh</button>
+      <button class="btn btn-sec" onclick="location.href='/'">🚪 Logout</button>
+    </div>
   </div>
 
   <div class="sgrid">
@@ -954,71 +1012,252 @@ app.get('/admin/dashboard', (req, res) => {
   </div>
 
   <div class="card">
-    <h2>👥 User Management</h2>
+    <h2>
+      👥 Game Management
+      <button class="btn btn-g" onclick="openAddGame()">➕ Tambah Game</button>
+    </h2>
     <div class="tbl-wrap">
       <table>
-        <thead><tr><th>ID</th><th>Nama Game</th><th>Universe ID</th><th>Donasi</th><th>Total Amount</th><th>Last Active</th><th>Actions</th></tr></thead>
-        <tbody id="uTbody"><tr><td colspan="7" style="text-align:center;padding:30px;color:#64748b">Loading…</td></tr></tbody>
+        <thead>
+          <tr>
+            <th>ID</th><th>Nama Game</th><th>Universe ID</th><th>Webhook Secret</th>
+            <th>Donasi</th><th>Total Amount</th><th>Last Active</th><th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="uTbody"><tr><td colspan="8" style="text-align:center;padding:30px;color:#64748b">Loading…</td></tr></tbody>
       </table>
     </div>
   </div>
 
   <!-- Donation preview per game -->
   <div class="card" id="donCard" style="display:none">
-    <h2 id="donCardTitle">📜 Donasi — </h2>
+    <h2 id="donCardTitle">📜 Donasi</h2>
     <div id="donCardContent"></div>
   </div>
 </div>
 
 <script>
 const TOKEN = ${JSON.stringify(token)};
-function toast(msg,ok=true){const e=document.getElementById(ok?'tOk':'tErr');e.textContent=msg;e.style.display='block';setTimeout(()=>e.style.display='none',3000)}
-function fmt(n){return new Intl.NumberFormat('id-ID',{style:'currency',currency:'IDR',minimumFractionDigits:0}).format(n)}
-function fmtDate(s){return s?new Date(s).toLocaleString('id-ID',{dateStyle:'short',timeStyle:'short'}):'—'}
-function closeModal(){document.getElementById('rpModal').classList.remove('active')}
-function openReset(id,name){document.getElementById('rpId').value=id;document.getElementById('rpName').value=name;document.getElementById('rpPwd').value='';document.getElementById('rpModal').classList.add('active');document.getElementById('rpPwd').focus()}
+const BASE_URL = location.origin;
+let pendingDeleteId = null;
 
+function toast(msg, ok=true) {
+  const e = document.getElementById(ok?'tOk':'tErr');
+  e.textContent = msg; e.style.display = 'block';
+  setTimeout(() => e.style.display = 'none', 4000);
+}
+function fmt(n) { return new Intl.NumberFormat('id-ID',{style:'currency',currency:'IDR',minimumFractionDigits:0}).format(n); }
+function fmtDate(s) { return s ? new Date(s).toLocaleString('id-ID',{dateStyle:'short',timeStyle:'short'}) : '—'; }
+function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+function closeConfirm() { document.getElementById('confirmDel').classList.remove('active'); pendingDeleteId = null; }
+
+// ─ Load Users ─────────────────────────────────────────────────────────────────
 async function loadUsers() {
   const r = await fetch('/api/admin/users?token='+encodeURIComponent(TOKEN));
   const d = await r.json();
-  if(!d.success) return;
+  if (!d.success) return toast('Gagal load data', false);
   const users = d.users;
   document.getElementById('aTotal').textContent = users.length;
-  const allDon = users.reduce((a,u)=>a+u.donationCount,0);
-  const allAmt = users.reduce((a,u)=>a+u.donationTotal,0);
+  const allDon = users.reduce((a,u) => a+u.donationCount, 0);
+  const allAmt = users.reduce((a,u) => a+u.donationTotal, 0);
   document.getElementById('aAllDon').textContent = allDon.toLocaleString();
   document.getElementById('aAllAmt').textContent = fmt(allAmt);
+
   const tbody = document.getElementById('uTbody');
-  if(!users.length){tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:30px;color:#64748b">No users</td></tr>';return;}
-  tbody.innerHTML = users.map(u=>\`
+  if (!users.length) {
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:30px;color:#64748b">Belum ada game. Klik "Tambah Game" untuk memulai.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = users.map(u => \`
     <tr>
-      <td><span class="badge bp">\${u.id}</span></td>
+      <td><span class="badge bp" style="font-size:11px">\${u.id}</span></td>
       <td><strong>\${u.name}</strong></td>
-      <td style="font-family:monospace;font-size:12px">\${u.universeId}</td>
+      <td style="font-family:monospace;font-size:11px">\${u.universeId}</td>
+      <td>
+        <span style="font-family:monospace;font-size:11px;color:#8b5cf6">\${u.webhookSecret}</span>
+      </td>
       <td><span class="badge bs">\${u.donationCount.toLocaleString()} tx</span></td>
       <td><strong style="color:#f59e0b">\${fmt(u.donationTotal)}</strong></td>
       <td style="font-size:12px;color:#64748b">\${fmtDate(u.lastActive)}</td>
-      <td style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn" style="font-size:12px;padding:6px 12px" onclick="viewDonations('\${u.id}','\${u.name}')">📜 History</button>
-        <button class="btn btn-d" style="font-size:12px;padding:6px 12px" onclick="openReset('\${u.id}','\${u.name}')">🔑 Reset</button>
+      <td>
+        <div class="actions-cell">
+          <button class="btn" style="font-size:11px;padding:5px 10px" onclick="viewDonations('\${u.id}','\${u.name}')">📜</button>
+          <button class="btn btn-sec" style="font-size:11px;padding:5px 10px" onclick="openEditGame('\${u.id}')">✏️</button>
+          <button class="btn btn-warn" style="font-size:11px;padding:5px 10px" onclick="openReset('\${u.id}','\${u.name}')">🔑</button>
+          <button class="btn btn-d" style="font-size:11px;padding:5px 10px" onclick="askDelete('\${u.id}','\${u.name}')">🗑️</button>
+        </div>
       </td>
-    </tr>\`).join('');
+    </tr>
+  \`).join('');
 }
 
-async function viewDonations(gameId, gameName) {
-  const card = document.getElementById('donCard');
-  const title = document.getElementById('donCardTitle');
-  const content = document.getElementById('donCardContent');
-  card.style.display='block';
-  title.textContent = '📜 Donasi — '+gameName;
-  content.innerHTML='<p style="color:#64748b;padding:16px 0">Loading…</p>';
-  card.scrollIntoView({behavior:'smooth',block:'start'});
-  const r = await fetch(\`/api/admin/donations?token=\${encodeURIComponent(TOKEN)}&gameId=\${gameId}&limit=50&offset=0\`);
+// ─ Add Game ───────────────────────────────────────────────────────────────────
+function openAddGame() {
+  document.getElementById('gmTitle').textContent = '➕ Tambah Game Baru';
+  document.getElementById('gmMode').value = 'add';
+  document.getElementById('gmId').value = '';
+  document.getElementById('gmForm').reset();
+  document.getElementById('gmSecretFg').style.display = '';
+  document.getElementById('gmPwdFg').style.display = '';
+  document.getElementById('gmPwdLabel').textContent = '*';
+  document.getElementById('gmPwdHint').textContent = 'Password untuk login user dashboard';
+  document.getElementById('gmPwd').required = true;
+  document.getElementById('gmSubmit').textContent = '✅ Tambah Game';
+  document.getElementById('gameModal').classList.add('active');
+}
+
+async function openEditGame(gameId) {
+  // Fetch game details
+  const r = await fetch('/api/admin/users?token='+encodeURIComponent(TOKEN));
   const d = await r.json();
-  if(!d.success||!d.donations.length){content.innerHTML='<p style="color:#64748b;padding:16px 0">Belum ada donasi</p>';return;}
-  content.innerHTML=\`<div class="don-panel"><div class="tbl-wrap"><table>
+  if (!d.success) return toast('Gagal load data', false);
+  const game = d.users.find(u => u.id === gameId);
+  if (!game) return toast('Game tidak ditemukan', false);
+
+  document.getElementById('gmTitle').textContent = '✏️ Edit Game: ' + game.name;
+  document.getElementById('gmMode').value = 'edit';
+  document.getElementById('gmId').value = gameId;
+  document.getElementById('gmName').value = game.name;
+  document.getElementById('gmUid').value = game.universeId;
+  document.getElementById('gmApiKey').value = '';
+  document.getElementById('gmTopic').value = game.topic || '';
+  document.getElementById('gmSecretFg').style.display = 'none'; // cannot change secret in edit
+  document.getElementById('gmPwdFg').style.display = 'none';
+  document.getElementById('gmPwd').required = false;
+  document.getElementById('gmSaweria').value = '';
+  document.getElementById('gmSocialbuzz').value = '';
+  document.getElementById('gmSubmit').textContent = '✅ Simpan Perubahan';
+  document.getElementById('gameModal').classList.add('active');
+}
+
+function closeGameModal() {
+  document.getElementById('gameModal').classList.remove('active');
+  document.getElementById('gmForm').reset();
+}
+
+function generatePwd() {
+  const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let pwd = '';
+  for (let i=0;i<10;i++) pwd += chars[Math.floor(Math.random()*chars.length)];
+  document.getElementById('gmPwd').value = pwd;
+  document.getElementById('gmPwd').type = 'text';
+}
+
+document.getElementById('gmForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const mode = document.getElementById('gmMode').value;
+  const btn  = document.getElementById('gmSubmit');
+  btn.disabled = true;
+  btn.textContent = '⏳ Menyimpan…';
+
+  if (mode === 'add') {
+    const payload = {
+      token:           TOKEN,
+      name:            document.getElementById('gmName').value.trim(),
+      universeId:      document.getElementById('gmUid').value.trim(),
+      apiKey:          document.getElementById('gmApiKey').value.trim(),
+      topic:           document.getElementById('gmTopic').value.trim(),
+      webhookSecret:   document.getElementById('gmSecret').value.trim(),
+      password:        document.getElementById('gmPwd').value,
+      saweriaToken:    document.getElementById('gmSaweria').value.trim(),
+      socialbuzzToken: document.getElementById('gmSocialbuzz').value.trim()
+    };
+    const r = await fetch('/api/admin/games', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
+    const d = await r.json();
+    if (d.success) {
+      toast('Game berhasil ditambahkan! 🎮');
+      closeGameModal();
+      loadUsers();
+    } else {
+      toast(d.error || 'Gagal menambah game', false);
+    }
+  } else {
+    const gameId = document.getElementById('gmId').value;
+    const payload = {
+      token:           TOKEN,
+      name:            document.getElementById('gmName').value.trim(),
+      universeId:      document.getElementById('gmUid').value.trim(),
+      apiKey:          document.getElementById('gmApiKey').value.trim(),
+      topic:           document.getElementById('gmTopic').value.trim(),
+      saweriaToken:    document.getElementById('gmSaweria').value.trim(),
+      socialbuzzToken: document.getElementById('gmSocialbuzz').value.trim()
+    };
+    const r = await fetch('/api/admin/games/'+gameId, { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
+    const d = await r.json();
+    if (d.success) {
+      toast('Game berhasil diupdate! ✅');
+      closeGameModal();
+      loadUsers();
+    } else {
+      toast(d.error || 'Gagal update game', false);
+    }
+  }
+
+  btn.disabled = false;
+  btn.textContent = mode === 'add' ? '✅ Tambah Game' : '✅ Simpan Perubahan';
+});
+
+// ─ Delete Game ────────────────────────────────────────────────────────────────
+function askDelete(gameId, name) {
+  pendingDeleteId = gameId;
+  document.getElementById('confirmDelMsg').innerHTML =
+    'Yakin ingin menghapus <strong>"'+name+'"</strong>? Password akan dihapus. <br><br>Data donasi tetap tersimpan untuk audit.';
+  document.getElementById('confirmDel').classList.add('active');
+}
+
+async function confirmDeleteGame() {
+  if (!pendingDeleteId) return;
+  const r = await fetch('/api/admin/games/'+pendingDeleteId+'?token='+encodeURIComponent(TOKEN), { method:'DELETE' });
+  const d = await r.json();
+  if (d.success) {
+    toast(d.message || 'Game dihapus');
+    closeConfirm();
+    loadUsers();
+    document.getElementById('donCard').style.display = 'none';
+  } else {
+    toast(d.error || 'Gagal hapus', false);
+    closeConfirm();
+  }
+}
+
+// ─ Reset Password ─────────────────────────────────────────────────────────────
+function openReset(id, name) {
+  document.getElementById('rpId').value = id;
+  document.getElementById('rpName').value = name;
+  document.getElementById('rpPwd').value = '';
+  document.getElementById('rpModal').classList.add('active');
+  document.getElementById('rpPwd').focus();
+}
+
+document.getElementById('rpForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const id  = document.getElementById('rpId').value;
+  const pwd = document.getElementById('rpPwd').value;
+  if (pwd.length < 6) return toast('Min. 6 karakter', false);
+  const r = await fetch('/api/admin/reset-password', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({token:TOKEN,gameId:id,newPassword:pwd}) });
+  const d = await r.json();
+  if (d.success) { toast('Password berhasil direset!'); closeModal('rpModal'); }
+  else toast(d.error || 'Gagal', false);
+});
+
+// ─ View Donations ─────────────────────────────────────────────────────────────
+async function viewDonations(gameId, gameName) {
+  const card    = document.getElementById('donCard');
+  const title   = document.getElementById('donCardTitle');
+  const content = document.getElementById('donCardContent');
+  card.style.display = 'block';
+  title.textContent  = '📜 Donasi — ' + gameName;
+  content.innerHTML  = '<p style="color:#64748b;padding:16px 0">Loading…</p>';
+  card.scrollIntoView({ behavior:'smooth', block:'start' });
+  const r = await fetch('/api/admin/donations?token='+encodeURIComponent(TOKEN)+'&gameId='+gameId+'&limit=50&offset=0');
+  const d = await r.json();
+  if (!d.success || !d.donations.length) {
+    content.innerHTML = '<p style="color:#64748b;padding:16px 0">Belum ada donasi</p>';
+    return;
+  }
+  content.innerHTML = \`<div class="don-panel"><div class="tbl-wrap"><table>
     <thead><tr><th>#</th><th>Waktu</th><th>Username</th><th>Nama</th><th>Platform</th><th>Jumlah</th><th>Pesan</th></tr></thead>
-    <tbody>\${d.donations.map((x,i)=>\`
+    <tbody>\${d.donations.map((x,i) => \`
       <tr>
         <td style="color:#64748b">\${i+1}</td>
         <td style="white-space:nowrap">\${fmtDate(x.donated_at)}</td>
@@ -1028,21 +1267,20 @@ async function viewDonations(gameId, gameName) {
         <td><strong>\${fmt(x.amount)}</strong></td>
         <td style="color:#94a3b8;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">\${x.message||'—'}</td>
       </tr>\`).join('')}
-    </tbody></table></div><p style="color:#64748b;font-size:12px;margin-top:12px">Menampilkan 50 terbaru. Total: \${d.total}</p></div>\`;
+    </tbody></table></div>
+    <p style="color:#64748b;font-size:12px;margin-top:12px">Menampilkan 50 terbaru. Total: \${d.total}</p>
+  </div>\`;
 }
 
-document.getElementById('rpForm').addEventListener('submit',async e=>{
-  e.preventDefault();
-  const id=document.getElementById('rpId').value, pwd=document.getElementById('rpPwd').value;
-  if(pwd.length<6) return toast('Min. 6 karakter','err');
-  const r=await fetch('/api/admin/reset-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:TOKEN,gameId:id,newPassword:pwd})});
-  const d=await r.json();
-  if(d.success){toast('Password berhasil direset!');closeModal();}else toast(d.error||'Gagal','err');
+// Close modals on overlay click
+['rpModal','gameModal'].forEach(id => {
+  document.getElementById(id).addEventListener('click', e => { if (e.target.id === id) closeModal(id); });
 });
-document.getElementById('rpModal').addEventListener('click',e=>{if(e.target.id==='rpModal')closeModal();});
+document.getElementById('confirmDel').addEventListener('click', e => { if (e.target.id === 'confirmDel') closeConfirm(); });
 
+// Init
 loadUsers();
-setInterval(loadUsers,30000);
+setInterval(loadUsers, 30000);
 </script>
 </body></html>`);
 });
@@ -1053,12 +1291,27 @@ setInterval(loadUsers,30000);
 app.use((_req, res) => res.status(404).json({ error: 'Not found' }));
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Start
+//  Auto-migrate & start
 // ─────────────────────────────────────────────────────────────────────────────
 async function autoMigrate() {
     const client = await pool.connect();
     try {
         console.log('🔄 Auto-migration running...');
+        await client.query('BEGIN');
+
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS games (
+                id               VARCHAR(50)  PRIMARY KEY,
+                name             VARCHAR(255) NOT NULL,
+                universe_id      VARCHAR(100) NOT NULL,
+                api_key          VARCHAR(255) NOT NULL,
+                topic            VARCHAR(255) DEFAULT 'ArchieDonationIDR',
+                webhook_secret   VARCHAR(255) NOT NULL UNIQUE,
+                saweria_token    VARCHAR(255),
+                socialbuzz_token VARCHAR(255),
+                created_at       TIMESTAMPTZ  DEFAULT NOW()
+            )
+        `);
         await client.query(`
             CREATE TABLE IF NOT EXISTS game_passwords (
                 game_id    VARCHAR(50)  PRIMARY KEY,
@@ -1082,8 +1335,11 @@ async function autoMigrate() {
         await client.query(`CREATE INDEX IF NOT EXISTS idx_don_game      ON donations(game_id)`);
         await client.query(`CREATE INDEX IF NOT EXISTS idx_don_game_date ON donations(game_id, donated_at DESC)`);
         await client.query(`CREATE INDEX IF NOT EXISTS idx_don_user      ON donations(game_id, username)`);
+
+        await client.query('COMMIT');
         console.log('✅ Migration done');
     } catch (err) {
+        await client.query('ROLLBACK');
         console.error('❌ Migration error:', err.message);
         throw err;
     } finally {
@@ -1091,16 +1347,39 @@ async function autoMigrate() {
     }
 }
 
+async function seedEnvGames() {
+    const envGames = loadEnvGames();
+    if (!envGames.length) {
+        console.log('ℹ️  No env-based games to seed');
+        return;
+    }
+    for (const g of envGames) {
+        const exists = await dbGetGameById(g.id).catch(() => null);
+        if (!exists) {
+            try {
+                await dbAddGame(g);
+                await dbSetPassword(g.id, g.envPassword);
+                console.log(`🌱 Seeded game from env: ${g.name} (${g.id})`);
+            } catch (e) {
+                console.error(`⚠️  Failed to seed ${g.id}:`, e.message);
+            }
+        } else {
+            // Ensure password exists
+            const pwd = await dbGetPassword(g.id).catch(() => null);
+            if (!pwd) await dbSetPassword(g.id, g.envPassword).catch(() => {});
+        }
+    }
+}
+
 autoMigrate()
-    .then(() => Promise.all(GAMES.map(async g => {
-        const existing = await dbGetPassword(g.id).catch(() => null);
-        if (!existing) await dbSetPassword(g.id, g.envPassword).catch(() => {});
-    })))
-    .then(() => {
+    .then(seedEnvGames)
+    .then(async () => {
+        const games = await dbGetAllGames();
+        console.log(`🎮 Archie Webhook — ${games.length} game(s) in database`);
+        games.forEach(g => console.log(`   📌 ${g.id}: ${g.name} (Universe: ${g.universeId})`));
+        const db = readDB();
         app.listen(port, () => {
             console.log(`✅ Server running on port ${port}`);
-            console.log(`🎮 Games: ${GAMES.map(g => g.name).join(', ')}`);
-            const db = readDB();
             console.log(`👑 Admin: ${db.admin.username}`);
         });
     })
