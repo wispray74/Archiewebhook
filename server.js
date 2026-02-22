@@ -829,9 +829,13 @@ loadStats();
 // ─────────────────────────────────────────────────────────────────────────────
 //  Admin Dashboard
 // ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+//  Admin Dashboard
+// ─────────────────────────────────────────────────────────────────────────────
 app.get('/admin/dashboard', (req, res) => {
     const token = req.query.token;
     if (!token || !adminFromToken(token)) return res.redirect('/');
+    const ARCH_LICENSE_URL = process.env.ARCH_LICENSE_URL || '';
 
     res.send(`<!DOCTYPE html>
 <html lang="en">
@@ -841,16 +845,26 @@ app.get('/admin/dashboard', (req, res) => {
   <style>
     *{margin:0;padding:0;box-sizing:border-box}
     body{font-family:'Segoe UI',system-ui,sans-serif;background:#0a0e27;color:#fff;min-height:100vh;padding:20px}
-    .container{max-width:1200px;margin:0 auto}
+    .container{max-width:1300px;margin:0 auto}
     .header{background:linear-gradient(135deg,rgba(139,92,246,.2),rgba(59,130,246,.2));border:1px solid rgba(139,92,246,.3);border-radius:20px;padding:28px 32px;margin-bottom:28px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px}
     .header h1{font-size:28px;background:linear-gradient(135deg,#8b5cf6,#3b82f6);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
     .header p{color:#94a3b8;font-size:13px;margin-top:4px}
+    /* ─ top tabs ─ */
+    .top-tabs{display:flex;gap:6px;margin-bottom:28px;border-bottom:1px solid rgba(139,92,246,.15)}
+    .ttab{padding:11px 22px;background:none;border:none;border-bottom:3px solid transparent;color:#94a3b8;font-size:14px;font-weight:600;cursor:pointer;transition:all .3s;border-radius:8px 8px 0 0}
+    .ttab.active{color:#8b5cf6;border-bottom-color:#8b5cf6;background:rgba(139,92,246,.1)}
+    .ttab:hover{color:#8b5cf6}
+    .tpage{display:none}.tpage.active{display:block}
+    /* ─ stats ─ */
     .sgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:24px}
     .scard{background:rgba(15,23,42,.8);border:1px solid rgba(139,92,246,.2);border-radius:14px;padding:20px;text-align:center}
     .scard .sv{font-size:32px;font-weight:700;background:linear-gradient(135deg,#8b5cf6,#3b82f6);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:6px}
     .scard .sl{color:#94a3b8;font-size:12px;text-transform:uppercase;letter-spacing:.5px}
+    /* ─ card ─ */
     .card{background:rgba(15,23,42,.8);border:1px solid rgba(139,92,246,.2);border-radius:16px;padding:24px;margin-bottom:20px}
     .card h2{color:#8b5cf6;font-size:20px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px}
+    .card h3{color:#8b5cf6;font-size:16px;margin-bottom:16px}
+    /* ─ table ─ */
     .tbl-wrap{overflow-x:auto}
     table{width:100%;border-collapse:collapse;font-size:13px}
     thead{background:rgba(139,92,246,.1)}
@@ -858,6 +872,7 @@ app.get('/admin/dashboard', (req, res) => {
     td{padding:12px 14px;color:#cbd5e1;border-bottom:1px solid rgba(139,92,246,.08)}
     tr:last-child td{border:none}
     tr:hover td{background:rgba(139,92,246,.04)}
+    /* ─ buttons ─ */
     .btn{padding:8px 16px;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;transition:all .3s;display:inline-flex;align-items:center;gap:5px;background:linear-gradient(135deg,#8b5cf6,#3b82f6);color:#fff}
     .btn:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(139,92,246,.4)}
     .btn-d{background:linear-gradient(135deg,#ef4444,#dc2626)}
@@ -866,17 +881,21 @@ app.get('/admin/dashboard', (req, res) => {
     .btn-g:hover{box-shadow:0 4px 12px rgba(16,185,129,.4)}
     .btn-sec{background:rgba(139,92,246,.2);border:1px solid rgba(139,92,246,.4)}
     .btn-warn{background:linear-gradient(135deg,#f59e0b,#d97706)}
+    .btn-sm{padding:5px 11px;font-size:12px}
+    /* ─ badge ─ */
     .badge{display:inline-block;padding:3px 10px;border-radius:10px;font-size:12px;font-weight:600}
     .bs{background:rgba(16,185,129,.15);color:#10b981;border:1px solid rgba(16,185,129,.3)}
     .bp{background:rgba(139,92,246,.15);color:#8b5cf6;border:1px solid rgba(139,92,246,.3)}
     .bw{background:rgba(245,158,11,.15);color:#f59e0b;border:1px solid rgba(245,158,11,.3)}
-    /* Modal */
+    .br{background:rgba(239,68,68,.15);color:#ef4444;border:1px solid rgba(239,68,68,.3)}
+    .bg{background:rgba(100,116,139,.15);color:#94a3b8;border:1px solid rgba(100,116,139,.3)}
+    /* ─ modal ─ */
     .modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);backdrop-filter:blur(6px);z-index:1000;justify-content:center;align-items:center;padding:20px;overflow-y:auto}
     .modal.active{display:flex}
     .mc{background:rgba(10,14,39,.97);border:1px solid rgba(139,92,246,.35);border-radius:20px;padding:32px;max-width:560px;width:100%;margin:auto;animation:mfade .3s}
     @keyframes mfade{from{opacity:0;transform:scale(.93)}to{opacity:1;transform:scale(1)}}
     .mh{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px}
-    .mh h2{color:#8b5cf6;font-size:22px}
+    .mh h2{color:#8b5cf6;font-size:20px}
     .xbtn{background:none;border:none;color:#94a3b8;font-size:22px;cursor:pointer;width:30px;height:30px;display:flex;align-items:center;justify-content:center;border-radius:6px;transition:all .3s}
     .xbtn:hover{background:rgba(139,92,246,.2);color:#8b5cf6}
     .fg{margin-bottom:16px}
@@ -885,28 +904,42 @@ app.get('/admin/dashboard', (req, res) => {
     .fg input,.fg select{width:100%;padding:11px 14px;background:rgba(15,23,42,.7);border:2px solid rgba(139,92,246,.2);border-radius:9px;color:#fff;font-size:14px;outline:none;transition:all .3s}
     .fg input:focus,.fg select:focus{border-color:#8b5cf6;box-shadow:0 0 0 3px rgba(139,92,246,.12)}
     .fg input::placeholder{color:#475569}
-    .fg .hint{color:#475569;font-size:11px;margin-top:5px}
     .fg select option{background:#0a0e27}
     .fgrow{display:grid;grid-template-columns:1fr 1fr;gap:14px}
     .divider{border:none;border-top:1px solid rgba(139,92,246,.12);margin:18px 0}
     .section-label{color:#64748b;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;margin-bottom:12px}
     .mf{display:flex;gap:10px;justify-content:flex-end;margin-top:22px;flex-wrap:wrap}
-    /* Toast */
+    /* ─ toast ─ */
     .toast{position:fixed;top:20px;right:20px;padding:14px 22px;border-radius:12px;font-weight:600;display:none;z-index:2000;max-width:340px;line-height:1.4}
     .tOk{background:rgba(16,185,129,.95);color:#fff}
     .tErr{background:rgba(239,68,68,.95);color:#fff}
-    /* Donation panel */
-    .don-panel{background:rgba(15,23,42,.6);border:1px solid rgba(139,92,246,.15);border-radius:12px;padding:20px;margin-top:12px}
-    /* Confirm overlay */
+    /* ─ confirm ─ */
     .confirm{display:none;position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:2000;justify-content:center;align-items:center;padding:20px}
     .confirm.active{display:flex}
     .confirm-box{background:rgba(10,14,39,.97);border:1px solid rgba(239,68,68,.3);border-radius:16px;padding:28px;max-width:380px;width:100%;text-align:center}
     .confirm-box h3{color:#ef4444;margin-bottom:10px;font-size:18px}
     .confirm-box p{color:#94a3b8;font-size:14px;margin-bottom:20px;line-height:1.5}
     .confirm-box .cf{display:flex;gap:10px;justify-content:center}
-    /* Webhook URL display */
-    .wh-url{font-family:'Courier New',monospace;font-size:11px;color:#10b981;background:rgba(0,0,0,.4);padding:8px 10px;border-radius:6px;word-break:break-all;margin-top:4px}
-    .actions-cell{display:flex;gap:6px;flex-wrap:wrap}
+    /* ─ actions cell ─ */
+    .ac{display:flex;gap:6px;flex-wrap:wrap}
+    /* ─ arch login box ─ */
+    .arch-login{background:rgba(15,23,42,.9);border:1px solid rgba(139,92,246,.3);border-radius:16px;padding:32px;max-width:420px;margin:0 auto}
+    .arch-login h3{color:#8b5cf6;font-size:18px;margin-bottom:6px;text-align:center}
+    .arch-login p{color:#94a3b8;font-size:13px;margin-bottom:24px;text-align:center}
+    .arch-no-url{background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);border-radius:12px;padding:20px;text-align:center;color:#f59e0b}
+    /* ─ inner tabs (for license panel) ─ */
+    .itabs{display:flex;gap:6px;margin-bottom:20px}
+    .itab{padding:8px 16px;background:rgba(15,23,42,.5);border:1px solid rgba(139,92,246,.15);border-radius:8px;color:#94a3b8;font-size:13px;font-weight:600;cursor:pointer;transition:all .3s}
+    .itab.active{background:rgba(139,92,246,.15);border-color:#8b5cf6;color:#8b5cf6}
+    .ipage{display:none}.ipage.active{display:block}
+    /* ─ mono ─ */
+    .mono{font-family:'Courier New',monospace;font-size:12px;color:#a78bfa}
+    .event-tag{display:inline-flex;padding:2px 8px;border-radius:4px;font-size:11px;font-family:monospace;font-weight:600}
+    .ev-ok{background:rgba(34,197,94,.1);color:#22c55e}
+    .ev-err{background:rgba(239,68,68,.1);color:#ef4444}
+    .ev-warn{background:rgba(245,158,11,.1);color:#f59e0b}
+    .ev-info{background:rgba(139,92,246,.1);color:#a78bfa}
+    .fg .hint{color:#475569;font-size:11px;margin-top:4px}
   </style>
 </head>
 <body>
@@ -916,11 +949,9 @@ app.get('/admin/dashboard', (req, res) => {
 <!-- Add / Edit Game Modal -->
 <div class="modal" id="gameModal">
   <div class="mc">
-    <div class="mh"><h2 id="gmTitle">➕ Tambah Game Baru</h2><button class="xbtn" onclick="closeGameModal()">×</button></div>
+    <div class="mh"><h2 id="gmTitle">➕ Tambah Game Baru</h2><button class="xbtn" onclick="closeModal('gameModal')">×</button></div>
     <form id="gmForm">
-      <input type="hidden" id="gmId">
-      <input type="hidden" id="gmMode"> <!-- add | edit -->
-
+      <input type="hidden" id="gmId"><input type="hidden" id="gmMode">
       <p class="section-label">📌 Informasi Dasar</p>
       <div class="fgrow">
         <div class="fg"><label>Nama Game <span>*</span></label><input id="gmName" placeholder="Contoh: My Roblox Game" required></div>
@@ -928,40 +959,24 @@ app.get('/admin/dashboard', (req, res) => {
       </div>
       <div class="fg"><label>Roblox API Key <span>*</span></label><input id="gmApiKey" placeholder="roblox_xxxxx..." required></div>
       <div class="fgrow">
-        <div class="fg">
-          <label>Topic</label>
-          <input id="gmTopic" placeholder="ArchieDonationIDR">
-          <p class="hint">Default: ArchieDonationIDR</p>
-        </div>
-        <div class="fg" id="gmSecretFg">
-          <label>Webhook Secret <span id="gmSecretOptLabel">(auto-generate jika kosong)</span></label>
-          <input id="gmSecret" placeholder="Kosongkan = auto-generate">
-        </div>
+        <div class="fg"><label>Topic</label><input id="gmTopic" placeholder="ArchieDonationIDR"><p class="hint">Default: ArchieDonationIDR</p></div>
+        <div class="fg" id="gmSecretFg"><label>Webhook Secret <span>(auto jika kosong)</span></label><input id="gmSecret" placeholder="Kosongkan = auto-generate"></div>
       </div>
-
       <hr class="divider">
       <p class="section-label">🔐 Password Akses</p>
       <div class="fgrow">
-        <div class="fg" id="gmPwdFg">
-          <label>Password <span id="gmPwdLabel">*</span></label>
-          <input type="text" id="gmPwd" placeholder="Min. 6 karakter">
-          <p class="hint" id="gmPwdHint">Password untuk login user dashboard</p>
-        </div>
-        <div class="fg" style="display:flex;align-items:flex-end;padding-bottom:4px">
-          <button type="button" class="btn btn-sec" style="width:100%;justify-content:center" onclick="generatePwd()">🎲 Generate</button>
-        </div>
+        <div class="fg" id="gmPwdFg"><label>Password <span id="gmPwdLabel">*</span></label><input type="text" id="gmPwd" placeholder="Min. 6 karakter"><p class="hint" id="gmPwdHint">Password login user dashboard</p></div>
+        <div class="fg" style="display:flex;align-items:flex-end;padding-bottom:4px"><button type="button" class="btn btn-sec" style="width:100%;justify-content:center" onclick="generatePwd()">🎲 Generate</button></div>
       </div>
-
       <hr class="divider">
       <p class="section-label">🔗 Token Webhook (Opsional)</p>
       <div class="fgrow">
         <div class="fg"><label>Saweria Token <span>(opsional)</span></label><input id="gmSaweria" placeholder="Kosongkan jika tidak pakai"></div>
         <div class="fg"><label>SocialBuzz Token <span>(opsional)</span></label><input id="gmSocialbuzz" placeholder="Kosongkan jika tidak pakai"></div>
       </div>
-
       <div class="mf">
-        <button type="button" class="btn btn-sec" onclick="closeGameModal()">Batal</button>
-        <button type="submit" class="btn btn-g" id="gmSubmit">✅ Simpan Game</button>
+        <button type="button" class="btn btn-sec" onclick="closeModal('gameModal')">Batal</button>
+        <button type="submit" class="btn btn-g" id="gmSubmit">✅ Simpan</button>
       </div>
     </form>
   </div>
@@ -983,11 +998,11 @@ app.get('/admin/dashboard', (req, res) => {
   </div>
 </div>
 
-<!-- Confirm Delete -->
+<!-- Confirm Delete Game -->
 <div class="confirm" id="confirmDel">
   <div class="confirm-box">
     <h3>⚠️ Hapus Game?</h3>
-    <p id="confirmDelMsg">Yakin ingin menghapus game ini? Password akan dihapus. <strong>Data donasi tetap tersimpan untuk audit.</strong></p>
+    <p id="confirmDelMsg">Yakin menghapus game ini?</p>
     <div class="cf">
       <button class="btn btn-sec" onclick="closeConfirm()">Batal</button>
       <button class="btn btn-d" onclick="confirmDeleteGame()">🗑️ Hapus</button>
@@ -995,288 +1010,429 @@ app.get('/admin/dashboard', (req, res) => {
   </div>
 </div>
 
+<!-- ARCH: Create License Modal -->
+<div class="modal" id="archCreateModal">
+  <div class="mc" style="max-width:420px">
+    <div class="mh"><h2>🔑 Buat License</h2><button class="xbtn" onclick="closeModal('archCreateModal')">×</button></div>
+    <form id="archCreateForm">
+      <div class="fg"><label>Roblox Owner User ID <span>*</span></label><input type="number" id="acOwnerId" placeholder="contoh: 1234567890" required></div>
+      <div class="fg"><label>Roblox Group ID <span>*</span></label><input type="number" id="acGroupId" placeholder="contoh: 9876543" required></div>
+      <div class="mf">
+        <button type="button" class="btn btn-sec" onclick="closeModal('archCreateModal')">Batal</button>
+        <button type="submit" class="btn btn-g">✅ Buat License</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ARCH: Edit License Modal -->
+<div class="modal" id="archEditModal">
+  <div class="mc" style="max-width:420px">
+    <div class="mh"><h2>✏️ Edit License</h2><button class="xbtn" onclick="closeModal('archEditModal')">×</button></div>
+    <form id="archEditForm">
+      <input type="hidden" id="aeId">
+      <div class="fg"><label>License Key</label><input type="text" id="aeKey" readonly style="opacity:.5"></div>
+      <div class="fgrow">
+        <div class="fg"><label>Owner User ID</label><input type="number" id="aeOwnerId"></div>
+        <div class="fg"><label>Group ID</label><input type="number" id="aeGroupId"></div>
+      </div>
+      <div class="fg"><label>Status</label>
+        <select id="aeEnabled"><option value="true">Enabled</option><option value="false">Disabled</option></select>
+      </div>
+      <div class="mf">
+        <button type="button" class="btn btn-sec" onclick="closeModal('archEditModal')">Batal</button>
+        <button type="submit" class="btn btn-g">✅ Simpan</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <div class="container">
   <div class="header">
-    <div><h1>🔐 Admin Dashboard</h1><p>Game Management & System Overview</p></div>
+    <div><h1>🔐 Admin Dashboard</h1><p>Game & License Management</p></div>
     <div style="display:flex;gap:10px;flex-wrap:wrap">
       <button class="btn btn-sec" onclick="location.reload()">🔄 Refresh</button>
       <button class="btn btn-sec" onclick="location.href='/'">🚪 Logout</button>
     </div>
   </div>
 
-  <div class="sgrid">
-    <div class="scard"><div class="sv" id="aTotal">0</div><div class="sl">Total Games</div></div>
-    <div class="scard"><div class="sv" id="aAllDon">0</div><div class="sl">Total Donasi Masuk</div></div>
-    <div class="scard"><div class="sv" id="aAllAmt">—</div><div class="sl">Total Amount</div></div>
-    <div class="scard"><div class="sv" style="font-size:22px">🟢 Online</div><div class="sl">System Status</div></div>
+  <!-- TOP TABS -->
+  <div class="top-tabs">
+    <button class="ttab active" onclick="switchTop('webhook')">🎮 Webhook Games</button>
+    <button class="ttab" onclick="switchTop('license')">🔑 ARCH License</button>
   </div>
 
-  <div class="card">
-    <h2>
-      👥 Game Management
-      <button class="btn btn-g" onclick="openAddGame()">➕ Tambah Game</button>
-    </h2>
-    <div class="tbl-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>ID</th><th>Nama Game</th><th>Universe ID</th><th>Webhook Secret</th>
-            <th>Donasi</th><th>Total Amount</th><th>Last Active</th><th>Actions</th>
-          </tr>
-        </thead>
-        <tbody id="uTbody"><tr><td colspan="8" style="text-align:center;padding:30px;color:#64748b">Loading…</td></tr></tbody>
-      </table>
+  <!-- ════════════ WEBHOOK TAB ════════════ -->
+  <div class="tpage active" id="tp-webhook">
+    <div class="sgrid">
+      <div class="scard"><div class="sv" id="aTotal">0</div><div class="sl">Total Games</div></div>
+      <div class="scard"><div class="sv" id="aAllDon">0</div><div class="sl">Total Donasi</div></div>
+      <div class="scard"><div class="sv" id="aAllAmt">—</div><div class="sl">Total Amount</div></div>
+      <div class="scard"><div class="sv" style="font-size:22px">🟢 Online</div><div class="sl">Status</div></div>
+    </div>
+    <div class="card">
+      <h2>👥 Game Management <button class="btn btn-g" onclick="openAddGame()">➕ Tambah Game</button></h2>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>ID</th><th>Nama Game</th><th>Universe ID</th><th>Webhook Secret</th><th>Donasi</th><th>Total</th><th>Last Active</th><th>Actions</th></tr></thead>
+          <tbody id="uTbody"><tr><td colspan="8" style="text-align:center;padding:30px;color:#64748b">Loading…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card" id="donCard" style="display:none">
+      <h2 id="donCardTitle">📜 Donasi</h2>
+      <div id="donCardContent"></div>
     </div>
   </div>
 
-  <!-- Donation preview per game -->
-  <div class="card" id="donCard" style="display:none">
-    <h2 id="donCardTitle">📜 Donasi</h2>
-    <div id="donCardContent"></div>
+  <!-- ════════════ ARCH LICENSE TAB ════════════ -->
+  <div class="tpage" id="tp-license">
+    ${ARCH_LICENSE_URL ? `
+    <!-- ARCH Auth State: hidden by default, shown after login -->
+    <div id="archLoginBox" style="margin:40px auto;max-width:420px">
+      <div class="arch-login">
+        <h3>🔑 ARCH License System</h3>
+        <p>Login ke ARCH backend untuk mengelola license</p>
+        <div class="fg"><label>Username</label><input type="text" id="archUser" placeholder="admin"></div>
+        <div class="fg"><label>Password</label><input type="password" id="archPass" placeholder="••••••••"></div>
+        <p id="archLoginErr" style="color:#ef4444;font-size:13px;margin-bottom:10px;display:none"></p>
+        <button class="btn" style="width:100%;justify-content:center" onclick="archLogin()">Sign In ke ARCH</button>
+        <p style="color:#64748b;font-size:12px;margin-top:12px;text-align:center">ARCH Backend: <span style="color:#8b5cf6">${ARCH_LICENSE_URL}</span></p>
+      </div>
+    </div>
+    <div id="archPanel" style="display:none">
+      <!-- inner stats -->
+      <div class="sgrid" style="grid-template-columns:repeat(4,1fr)">
+        <div class="scard"><div class="sv" id="lsTotalLic">—</div><div class="sl">Total License</div></div>
+        <div class="scard"><div class="sv" id="lsActiveLic" style="color:#10b981">—</div><div class="sl">Active</div></div>
+        <div class="scard"><div class="sv" id="lsLiveSess" style="color:#a78bfa">—</div><div class="sl">Live Sessions</div></div>
+        <div class="scard"><div class="sv" id="lsEvents" style="color:#f59e0b">—</div><div class="sl">Recent Events</div></div>
+      </div>
+      <!-- inner tabs -->
+      <div class="itabs">
+        <button class="itab active" onclick="switchArch('licenses')">⬡ Licenses</button>
+        <button class="itab" onclick="switchArch('sessions')">◎ Sessions</button>
+        <button class="itab" onclick="switchArch('logs')">≡ Logs</button>
+      </div>
+      <!-- Licenses -->
+      <div class="ipage active" id="ip-licenses">
+        <div class="card">
+          <h2>⬡ Licenses <button class="btn btn-g" onclick="openArchCreate()">＋ Buat License</button></h2>
+          <div class="tbl-wrap">
+            <table>
+              <thead><tr><th>License Key</th><th>Owner ID</th><th>Group ID</th><th>Status</th><th>Created</th><th>Actions</th></tr></thead>
+              <tbody id="licTbody"><tr><td colspan="6" style="text-align:center;padding:24px;color:#64748b">Loading…</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <!-- Sessions -->
+      <div class="ipage" id="ip-sessions">
+        <div class="card">
+          <h2>◎ Sessions <button class="btn btn-sec btn-sm" onclick="archLoadSessions()">↻ Refresh</button></h2>
+          <div class="tbl-wrap">
+            <table>
+              <thead><tr><th>License Key</th><th>Server ID</th><th>Token</th><th>Place ID</th><th>Expires</th><th>Status</th></tr></thead>
+              <tbody id="sessTbody"><tr><td colspan="6" style="text-align:center;padding:24px;color:#64748b">Loading…</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <!-- Logs -->
+      <div class="ipage" id="ip-logs">
+        <div class="card">
+          <h2>≡ Event Logs <button class="btn btn-sec btn-sm" onclick="archLoadLogs()">↻ Refresh</button></h2>
+          <div class="tbl-wrap">
+            <table>
+              <thead><tr><th>Event</th><th>License ID</th><th>IP</th><th>Meta</th><th>Waktu</th></tr></thead>
+              <tbody id="logsTbody"><tr><td colspan="5" style="text-align:center;padding:24px;color:#64748b">Loading…</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+    ` : `
+    <div class="arch-no-url" style="margin:40px auto;max-width:500px">
+      <div style="font-size:32px;margin-bottom:12px">⚠️</div>
+      <p style="font-size:15px;font-weight:600;margin-bottom:8px">ARCH_LICENSE_URL belum diset</p>
+      <p style="font-size:13px;color:#94a3b8">Tambahkan env var <code style="color:#f59e0b">ARCH_LICENSE_URL</code> di Railway service webhook ini dengan URL backend ARCH kamu.</p>
+      <p style="font-size:12px;color:#64748b;margin-top:12px">Contoh: <code>https://archlicense-production.up.railway.app</code></p>
+    </div>
+    `}
   </div>
 </div>
 
 <script>
 const TOKEN = ${JSON.stringify(token)};
-const BASE_URL = location.origin;
+const ARCH_URL = ${JSON.stringify(ARCH_LICENSE_URL)};
 let pendingDeleteId = null;
+let archToken = null;
 
+// ─ toast ─────────────────────────────────────────────────────────────────────
 function toast(msg, ok=true) {
   const e = document.getElementById(ok?'tOk':'tErr');
   e.textContent = msg; e.style.display = 'block';
   setTimeout(() => e.style.display = 'none', 4000);
 }
-function fmt(n) { return new Intl.NumberFormat('id-ID',{style:'currency',currency:'IDR',minimumFractionDigits:0}).format(n); }
-function fmtDate(s) { return s ? new Date(s).toLocaleString('id-ID',{dateStyle:'short',timeStyle:'short'}) : '—'; }
-function closeModal(id) { document.getElementById(id).classList.remove('active'); }
-function closeConfirm() { document.getElementById('confirmDel').classList.remove('active'); pendingDeleteId = null; }
 
-// ─ Load Users ─────────────────────────────────────────────────────────────────
+// ─ utils ─────────────────────────────────────────────────────────────────────
+function fmt(n){return new Intl.NumberFormat('id-ID',{style:'currency',currency:'IDR',minimumFractionDigits:0}).format(n)}
+function fmtDate(s){return s?new Date(s).toLocaleString('id-ID',{dateStyle:'short',timeStyle:'short'}):'—'}
+function relTime(s){const d=Date.now()-new Date(s).getTime();if(d<60000)return'just now';if(d<3600000)return Math.floor(d/60000)+'m ago';if(d<86400000)return Math.floor(d/3600000)+'h ago';return Math.floor(d/86400000)+'d ago';}
+
+// ─ top tab switch ─────────────────────────────────────────────────────────────
+function switchTop(id) {
+  document.querySelectorAll('.ttab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.tpage').forEach(p=>p.classList.remove('active'));
+  event.target.classList.add('active');
+  document.getElementById('tp-'+id).classList.add('active');
+  if (id==='webhook') loadUsers();
+  if (id==='license' && archToken) archLoadAll();
+}
+
+// ─ modal ─────────────────────────────────────────────────────────────────────
+function closeModal(id){document.getElementById(id).classList.remove('active')}
+function closeConfirm(){document.getElementById('confirmDel').classList.remove('active');pendingDeleteId=null}
+['rpModal','gameModal','archCreateModal','archEditModal'].forEach(id=>{
+  document.getElementById(id)?.addEventListener('click',e=>{if(e.target.id===id)closeModal(id)});
+});
+document.getElementById('confirmDel').addEventListener('click',e=>{if(e.target.id==='confirmDel')closeConfirm()});
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  WEBHOOK GAMES
+// ══════════════════════════════════════════════════════════════════════════════
 async function loadUsers() {
   const r = await fetch('/api/admin/users?token='+encodeURIComponent(TOKEN));
   const d = await r.json();
   if (!d.success) return toast('Gagal load data', false);
   const users = d.users;
   document.getElementById('aTotal').textContent = users.length;
-  const allDon = users.reduce((a,u) => a+u.donationCount, 0);
-  const allAmt = users.reduce((a,u) => a+u.donationTotal, 0);
-  document.getElementById('aAllDon').textContent = allDon.toLocaleString();
-  document.getElementById('aAllAmt').textContent = fmt(allAmt);
-
+  document.getElementById('aAllDon').textContent = users.reduce((a,u)=>a+u.donationCount,0).toLocaleString();
+  document.getElementById('aAllAmt').textContent = fmt(users.reduce((a,u)=>a+u.donationTotal,0));
   const tbody = document.getElementById('uTbody');
-  if (!users.length) {
-    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:30px;color:#64748b">Belum ada game. Klik "Tambah Game" untuk memulai.</td></tr>';
-    return;
-  }
-  tbody.innerHTML = users.map(u => \`
+  if (!users.length){tbody.innerHTML='<tr><td colspan="8" style="text-align:center;padding:30px;color:#64748b">Belum ada game. Klik "Tambah Game".</td></tr>';return;}
+  tbody.innerHTML = users.map(u=>\`
     <tr>
       <td><span class="badge bp" style="font-size:11px">\${u.id}</span></td>
       <td><strong>\${u.name}</strong></td>
       <td style="font-family:monospace;font-size:11px">\${u.universeId}</td>
-      <td>
-        <span style="font-family:monospace;font-size:11px;color:#8b5cf6">\${u.webhookSecret}</span>
-      </td>
+      <td><span class="mono">\${u.webhookSecret}</span></td>
       <td><span class="badge bs">\${u.donationCount.toLocaleString()} tx</span></td>
       <td><strong style="color:#f59e0b">\${fmt(u.donationTotal)}</strong></td>
       <td style="font-size:12px;color:#64748b">\${fmtDate(u.lastActive)}</td>
-      <td>
-        <div class="actions-cell">
-          <button class="btn" style="font-size:11px;padding:5px 10px" onclick="viewDonations('\${u.id}','\${u.name}')">📜</button>
-          <button class="btn btn-sec" style="font-size:11px;padding:5px 10px" onclick="openEditGame('\${u.id}')">✏️</button>
-          <button class="btn btn-warn" style="font-size:11px;padding:5px 10px" onclick="openReset('\${u.id}','\${u.name}')">🔑</button>
-          <button class="btn btn-d" style="font-size:11px;padding:5px 10px" onclick="askDelete('\${u.id}','\${u.name}')">🗑️</button>
-        </div>
-      </td>
-    </tr>
-  \`).join('');
+      <td><div class="ac">
+        <button class="btn btn-sm" style="font-size:11px;padding:5px 10px" onclick="viewDonations('\${u.id}','\${u.name}')">📜</button>
+        <button class="btn btn-sec btn-sm" style="font-size:11px;padding:5px 10px" onclick="openEditGame('\${u.id}')">✏️</button>
+        <button class="btn btn-warn btn-sm" style="font-size:11px;padding:5px 10px" onclick="openReset('\${u.id}','\${u.name}')">🔑</button>
+        <button class="btn btn-d btn-sm" style="font-size:11px;padding:5px 10px" onclick="askDelete('\${u.id}','\${u.name}')">🗑️</button>
+      </div></td>
+    </tr>\`).join('');
 }
 
-// ─ Add Game ───────────────────────────────────────────────────────────────────
-function openAddGame() {
-  document.getElementById('gmTitle').textContent = '➕ Tambah Game Baru';
-  document.getElementById('gmMode').value = 'add';
-  document.getElementById('gmId').value = '';
+function openAddGame(){
+  document.getElementById('gmTitle').textContent='➕ Tambah Game Baru';
+  document.getElementById('gmMode').value='add';document.getElementById('gmId').value='';
   document.getElementById('gmForm').reset();
-  document.getElementById('gmSecretFg').style.display = '';
-  document.getElementById('gmPwdFg').style.display = '';
-  document.getElementById('gmPwdLabel').textContent = '*';
-  document.getElementById('gmPwdHint').textContent = 'Password untuk login user dashboard';
-  document.getElementById('gmPwd').required = true;
-  document.getElementById('gmSubmit').textContent = '✅ Tambah Game';
+  document.getElementById('gmSecretFg').style.display='';
+  document.getElementById('gmPwdFg').style.display='';
+  document.getElementById('gmPwdLabel').textContent='*';
+  document.getElementById('gmPwd').required=true;
+  document.getElementById('gmSubmit').textContent='✅ Tambah Game';
   document.getElementById('gameModal').classList.add('active');
 }
 
-async function openEditGame(gameId) {
-  // Fetch game details
-  const r = await fetch('/api/admin/users?token='+encodeURIComponent(TOKEN));
-  const d = await r.json();
-  if (!d.success) return toast('Gagal load data', false);
-  const game = d.users.find(u => u.id === gameId);
-  if (!game) return toast('Game tidak ditemukan', false);
-
-  document.getElementById('gmTitle').textContent = '✏️ Edit Game: ' + game.name;
-  document.getElementById('gmMode').value = 'edit';
-  document.getElementById('gmId').value = gameId;
-  document.getElementById('gmName').value = game.name;
-  document.getElementById('gmUid').value = game.universeId;
-  document.getElementById('gmApiKey').value = '';
-  document.getElementById('gmTopic').value = game.topic || '';
-  document.getElementById('gmSecretFg').style.display = 'none'; // cannot change secret in edit
-  document.getElementById('gmPwdFg').style.display = 'none';
-  document.getElementById('gmPwd').required = false;
-  document.getElementById('gmSaweria').value = '';
-  document.getElementById('gmSocialbuzz').value = '';
-  document.getElementById('gmSubmit').textContent = '✅ Simpan Perubahan';
+async function openEditGame(gameId){
+  const r=await fetch('/api/admin/users?token='+encodeURIComponent(TOKEN));
+  const d=await r.json();
+  if(!d.success)return toast('Gagal load data',false);
+  const game=d.users.find(u=>u.id===gameId);
+  if(!game)return toast('Game tidak ditemukan',false);
+  document.getElementById('gmTitle').textContent='✏️ Edit: '+game.name;
+  document.getElementById('gmMode').value='edit';document.getElementById('gmId').value=gameId;
+  document.getElementById('gmName').value=game.name;document.getElementById('gmUid').value=game.universeId;
+  document.getElementById('gmApiKey').value='';document.getElementById('gmTopic').value=game.topic||'';
+  document.getElementById('gmSecretFg').style.display='none';
+  document.getElementById('gmPwdFg').style.display='none';document.getElementById('gmPwd').required=false;
+  document.getElementById('gmSaweria').value='';document.getElementById('gmSocialbuzz').value='';
+  document.getElementById('gmSubmit').textContent='✅ Simpan Perubahan';
   document.getElementById('gameModal').classList.add('active');
 }
 
-function closeGameModal() {
-  document.getElementById('gameModal').classList.remove('active');
-  document.getElementById('gmForm').reset();
+function closeGameModal(){document.getElementById('gameModal').classList.remove('active');document.getElementById('gmForm').reset();}
+function generatePwd(){const c='abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';let p='';for(let i=0;i<10;i++)p+=c[Math.floor(Math.random()*c.length)];document.getElementById('gmPwd').value=p;document.getElementById('gmPwd').type='text';}
+
+document.getElementById('gmForm').addEventListener('submit',async e=>{
+  e.preventDefault();const mode=document.getElementById('gmMode').value;const btn=document.getElementById('gmSubmit');btn.disabled=true;btn.textContent='⏳ Menyimpan…';
+  if(mode==='add'){
+    const payload={token:TOKEN,name:document.getElementById('gmName').value.trim(),universeId:document.getElementById('gmUid').value.trim(),apiKey:document.getElementById('gmApiKey').value.trim(),topic:document.getElementById('gmTopic').value.trim(),webhookSecret:document.getElementById('gmSecret').value.trim(),password:document.getElementById('gmPwd').value,saweriaToken:document.getElementById('gmSaweria').value.trim(),socialbuzzToken:document.getElementById('gmSocialbuzz').value.trim()};
+    const r=await fetch('/api/admin/games',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    const d=await r.json();
+    if(d.success){toast('Game berhasil ditambahkan! 🎮');closeGameModal();loadUsers();}else toast(d.error||'Gagal',false);
+  }else{
+    const gameId=document.getElementById('gmId').value;
+    const payload={token:TOKEN,name:document.getElementById('gmName').value.trim(),universeId:document.getElementById('gmUid').value.trim(),apiKey:document.getElementById('gmApiKey').value.trim(),topic:document.getElementById('gmTopic').value.trim(),saweriaToken:document.getElementById('gmSaweria').value.trim(),socialbuzzToken:document.getElementById('gmSocialbuzz').value.trim()};
+    const r=await fetch('/api/admin/games/'+gameId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    const d=await r.json();
+    if(d.success){toast('Game berhasil diupdate! ✅');closeGameModal();loadUsers();}else toast(d.error||'Gagal',false);
+  }
+  btn.disabled=false;btn.textContent=mode==='add'?'✅ Tambah Game':'✅ Simpan Perubahan';
+});
+
+function askDelete(gameId,name){pendingDeleteId=gameId;document.getElementById('confirmDelMsg').innerHTML='Yakin hapus <strong>"'+name+'"</strong>? Password dihapus, data donasi tetap tersimpan.';document.getElementById('confirmDel').classList.add('active');}
+async function confirmDeleteGame(){if(!pendingDeleteId)return;const r=await fetch('/api/admin/games/'+pendingDeleteId+'?token='+encodeURIComponent(TOKEN),{method:'DELETE'});const d=await r.json();if(d.success){toast(d.message||'Game dihapus');closeConfirm();loadUsers();document.getElementById('donCard').style.display='none';}else{toast(d.error||'Gagal hapus',false);closeConfirm();}}
+
+function openReset(id,name){document.getElementById('rpId').value=id;document.getElementById('rpName').value=name;document.getElementById('rpPwd').value='';document.getElementById('rpModal').classList.add('active');document.getElementById('rpPwd').focus();}
+document.getElementById('rpForm').addEventListener('submit',async e=>{e.preventDefault();const id=document.getElementById('rpId').value,pwd=document.getElementById('rpPwd').value;if(pwd.length<6)return toast('Min. 6 karakter',false);const r=await fetch('/api/admin/reset-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:TOKEN,gameId:id,newPassword:pwd})});const d=await r.json();if(d.success){toast('Password berhasil direset!');closeModal('rpModal');}else toast(d.error||'Gagal',false);});
+
+async function viewDonations(gameId,gameName){
+  const card=document.getElementById('donCard'),title=document.getElementById('donCardTitle'),content=document.getElementById('donCardContent');
+  card.style.display='block';title.textContent='📜 Donasi — '+gameName;content.innerHTML='<p style="color:#64748b;padding:16px 0">Loading…</p>';card.scrollIntoView({behavior:'smooth',block:'start'});
+  const r=await fetch('/api/admin/donations?token='+encodeURIComponent(TOKEN)+'&gameId='+gameId+'&limit=50&offset=0');
+  const d=await r.json();
+  if(!d.success||!d.donations.length){content.innerHTML='<p style="color:#64748b;padding:16px 0">Belum ada donasi</p>';return;}
+  content.innerHTML=\`<div style="background:rgba(15,23,42,.6);border:1px solid rgba(139,92,246,.15);border-radius:12px;padding:20px"><div class="tbl-wrap"><table><thead><tr><th>#</th><th>Waktu</th><th>Username</th><th>Nama</th><th>Platform</th><th>Jumlah</th><th>Pesan</th></tr></thead><tbody>\${d.donations.map((x,i)=>\`<tr><td style="color:#64748b">\${i+1}</td><td style="white-space:nowrap">\${fmtDate(x.donated_at)}</td><td><strong style="color:#10b981">\${x.username}</strong></td><td style="color:#94a3b8">\${x.display_name||'—'}</td><td>\${x.source||'?'}</td><td><strong>\${fmt(x.amount)}</strong></td><td style="color:#94a3b8;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">\${x.message||'—'}</td></tr>\`).join('')}</tbody></table></div><p style="color:#64748b;font-size:12px;margin-top:12px">50 terbaru. Total: \${d.total}</p></div>\`;
 }
 
-function generatePwd() {
-  const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  let pwd = '';
-  for (let i=0;i<10;i++) pwd += chars[Math.floor(Math.random()*chars.length)];
-  document.getElementById('gmPwd').value = pwd;
-  document.getElementById('gmPwd').type = 'text';
+// ══════════════════════════════════════════════════════════════════════════════
+//  ARCH LICENSE
+// ══════════════════════════════════════════════════════════════════════════════
+async function archApi(path, method='GET', body=null){
+  const headers={'Content-Type':'application/json'};
+  if(archToken)headers['Authorization']='Bearer '+archToken;
+  const res=await fetch(ARCH_URL+path,{method,headers,body:body?JSON.stringify(body):undefined});
+  const data=await res.json();
+  if(!res.ok)throw new Error(data.error||'HTTP '+res.status);
+  return data;
 }
 
-document.getElementById('gmForm').addEventListener('submit', async e => {
+async function archLogin(){
+  const u=document.getElementById('archUser').value.trim();
+  const p=document.getElementById('archPass').value;
+  const errEl=document.getElementById('archLoginErr');
+  errEl.style.display='none';
+  try{
+    const d=await archApi('/api/admin/login','POST',{username:u,password:p});
+    if(!d.token)throw new Error('No token returned');
+    archToken=d.token;
+    document.getElementById('archLoginBox').style.display='none';
+    document.getElementById('archPanel').style.display='block';
+    archLoadAll();
+  }catch(e){errEl.textContent=e.message;errEl.style.display='block';}
+}
+document.getElementById('archPass')?.addEventListener('keydown',e=>{if(e.key==='Enter')archLogin();});
+
+function switchArch(id){
+  document.querySelectorAll('.itab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.ipage').forEach(p=>p.classList.remove('active'));
+  event.target.classList.add('active');
+  document.getElementById('ip-'+id).classList.add('active');
+  if(id==='licenses')archLoadLicenses();
+  if(id==='sessions')archLoadSessions();
+  if(id==='logs')archLoadLogs();
+}
+
+async function archLoadAll(){
+  archLoadLicenses();
+  try{
+    const [lic,sess,logs]=await Promise.all([archApi('/api/admin/licenses'),archApi('/api/admin/sessions'),archApi('/api/admin/logs?limit=10')]);
+    document.getElementById('lsTotalLic').textContent=lic.length;
+    document.getElementById('lsActiveLic').textContent=lic.filter(l=>l.enabled).length;
+    document.getElementById('lsLiveSess').textContent=sess.filter(s=>!s.revoked&&new Date(s.expires_at)>new Date()).length;
+    document.getElementById('lsEvents').textContent=logs.length;
+  }catch(e){console.error(e);}
+}
+
+async function archLoadLicenses(){
+  const tbody=document.getElementById('licTbody');
+  try{
+    const lic=await archApi('/api/admin/licenses');
+    if(!lic.length){tbody.innerHTML='<tr><td colspan="6" style="text-align:center;padding:24px;color:#64748b">Belum ada license. Klik "Buat License".</td></tr>';return;}
+    tbody.innerHTML=lic.map(l=>\`<tr>
+      <td><span class="mono">\${l.license_key}</span></td>
+      <td style="font-family:monospace">\${l.owner_user_id}</td>
+      <td style="font-family:monospace">\${l.group_id}</td>
+      <td>\${l.enabled?'<span class="badge bs">Active</span>':'<span class="badge br">Disabled</span>'}</td>
+      <td style="color:#64748b;font-size:12px">\${fmtDate(l.created_at)}</td>
+      <td><div class="ac">
+        <button class="btn btn-sec btn-sm" onclick='openArchEdit(\${JSON.stringify(l)})'>✏️ Edit</button>
+        <button class="btn btn-d btn-sm" onclick="archDeleteLicense('\${l.id}')">🗑️</button>
+      </div></td>
+    </tr>\`).join('');
+  }catch(e){toast('Gagal load licenses: '+e.message,false);}
+}
+
+async function archLoadSessions(){
+  const tbody=document.getElementById('sessTbody');
+  try{
+    const sess=await archApi('/api/admin/sessions');
+    if(!sess.length){tbody.innerHTML='<tr><td colspan="6" style="text-align:center;padding:24px;color:#64748b">Tidak ada session</td></tr>';return;}
+    tbody.innerHTML=sess.map(s=>{
+      const live=!s.revoked&&new Date(s.expires_at)>new Date();
+      return \`<tr>
+        <td><span class="mono">\${s.license_key}</span></td>
+        <td style="font-size:11px;color:#64748b;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">\${s.server_id}</td>
+        <td style="font-size:11px;color:#64748b">\${s.session_token.slice(0,12)}…</td>
+        <td style="color:#94a3b8">\${s.place_id||'—'}</td>
+        <td style="color:#94a3b8;font-size:12px">\${fmtDate(s.expires_at)}</td>
+        <td>\${live?'<span class="badge bs">Live</span>':s.revoked?'<span class="badge br">Revoked</span>':'<span class="badge bg">Expired</span>'}</td>
+      </tr>\`;
+    }).join('');
+  }catch(e){toast('Gagal load sessions: '+e.message,false);}
+}
+
+async function archLoadLogs(){
+  const tbody=document.getElementById('logsTbody');
+  try{
+    const logs=await archApi('/api/admin/logs?limit=100');
+    if(!logs.length){tbody.innerHTML='<tr><td colspan="5" style="text-align:center;padding:24px;color:#64748b">Belum ada log</td></tr>';return;}
+    tbody.innerHTML=logs.map(l=>\`<tr>
+      <td>\${archEventTag(l.event)}</td>
+      <td style="font-size:11px;color:#64748b">\${l.license_id?l.license_id.slice(0,8)+'…':'—'}</td>
+      <td style="color:#94a3b8">\${l.ip||'—'}</td>
+      <td style="color:#94a3b8;font-size:11px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">\${l.meta?JSON.stringify(l.meta):'—'}</td>
+      <td style="color:#64748b;font-size:12px">\${relTime(l.created_at)}</td>
+    </tr>\`).join('');
+  }catch(e){toast('Gagal load logs: '+e.message,false);}
+}
+
+function archEventTag(ev){
+  if(!ev)return'—';
+  if(ev.includes('success'))return\`<span class="event-tag ev-ok">\${ev}</span>\`;
+  if(ev.includes('reject')||ev.includes('revok'))return\`<span class="event-tag ev-err">\${ev}</span>\`;
+  if(ev.includes('tamper')||ev.includes('warn'))return\`<span class="event-tag ev-warn">\${ev}</span>\`;
+  return\`<span class="event-tag ev-info">\${ev}</span>\`;
+}
+
+function openArchCreate(){document.getElementById('acOwnerId').value='';document.getElementById('acGroupId').value='';document.getElementById('archCreateModal').classList.add('active');}
+document.getElementById('archCreateForm').addEventListener('submit',async e=>{
   e.preventDefault();
-  const mode = document.getElementById('gmMode').value;
-  const btn  = document.getElementById('gmSubmit');
-  btn.disabled = true;
-  btn.textContent = '⏳ Menyimpan…';
-
-  if (mode === 'add') {
-    const payload = {
-      token:           TOKEN,
-      name:            document.getElementById('gmName').value.trim(),
-      universeId:      document.getElementById('gmUid').value.trim(),
-      apiKey:          document.getElementById('gmApiKey').value.trim(),
-      topic:           document.getElementById('gmTopic').value.trim(),
-      webhookSecret:   document.getElementById('gmSecret').value.trim(),
-      password:        document.getElementById('gmPwd').value,
-      saweriaToken:    document.getElementById('gmSaweria').value.trim(),
-      socialbuzzToken: document.getElementById('gmSocialbuzz').value.trim()
-    };
-    const r = await fetch('/api/admin/games', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
-    const d = await r.json();
-    if (d.success) {
-      toast('Game berhasil ditambahkan! 🎮');
-      closeGameModal();
-      loadUsers();
-    } else {
-      toast(d.error || 'Gagal menambah game', false);
-    }
-  } else {
-    const gameId = document.getElementById('gmId').value;
-    const payload = {
-      token:           TOKEN,
-      name:            document.getElementById('gmName').value.trim(),
-      universeId:      document.getElementById('gmUid').value.trim(),
-      apiKey:          document.getElementById('gmApiKey').value.trim(),
-      topic:           document.getElementById('gmTopic').value.trim(),
-      saweriaToken:    document.getElementById('gmSaweria').value.trim(),
-      socialbuzzToken: document.getElementById('gmSocialbuzz').value.trim()
-    };
-    const r = await fetch('/api/admin/games/'+gameId, { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
-    const d = await r.json();
-    if (d.success) {
-      toast('Game berhasil diupdate! ✅');
-      closeGameModal();
-      loadUsers();
-    } else {
-      toast(d.error || 'Gagal update game', false);
-    }
-  }
-
-  btn.disabled = false;
-  btn.textContent = mode === 'add' ? '✅ Tambah Game' : '✅ Simpan Perubahan';
+  const ownerUserId=parseInt(document.getElementById('acOwnerId').value);
+  const groupId=parseInt(document.getElementById('acGroupId').value);
+  if(!ownerUserId||!groupId)return toast('Kedua field wajib diisi',false);
+  try{await archApi('/api/admin/licenses','POST',{ownerUserId,groupId});closeModal('archCreateModal');toast('License berhasil dibuat! 🎉');archLoadLicenses();archLoadAll();}
+  catch(e){toast(e.message,false);}
 });
 
-// ─ Delete Game ────────────────────────────────────────────────────────────────
-function askDelete(gameId, name) {
-  pendingDeleteId = gameId;
-  document.getElementById('confirmDelMsg').innerHTML =
-    'Yakin ingin menghapus <strong>"'+name+'"</strong>? Password akan dihapus. <br><br>Data donasi tetap tersimpan untuk audit.';
-  document.getElementById('confirmDel').classList.add('active');
+function openArchEdit(l){
+  document.getElementById('aeId').value=l.id;document.getElementById('aeKey').value=l.license_key;
+  document.getElementById('aeOwnerId').value=l.owner_user_id;document.getElementById('aeGroupId').value=l.group_id;
+  document.getElementById('aeEnabled').value=String(l.enabled);
+  document.getElementById('archEditModal').classList.add('active');
 }
-
-async function confirmDeleteGame() {
-  if (!pendingDeleteId) return;
-  const r = await fetch('/api/admin/games/'+pendingDeleteId+'?token='+encodeURIComponent(TOKEN), { method:'DELETE' });
-  const d = await r.json();
-  if (d.success) {
-    toast(d.message || 'Game dihapus');
-    closeConfirm();
-    loadUsers();
-    document.getElementById('donCard').style.display = 'none';
-  } else {
-    toast(d.error || 'Gagal hapus', false);
-    closeConfirm();
-  }
-}
-
-// ─ Reset Password ─────────────────────────────────────────────────────────────
-function openReset(id, name) {
-  document.getElementById('rpId').value = id;
-  document.getElementById('rpName').value = name;
-  document.getElementById('rpPwd').value = '';
-  document.getElementById('rpModal').classList.add('active');
-  document.getElementById('rpPwd').focus();
-}
-
-document.getElementById('rpForm').addEventListener('submit', async e => {
+document.getElementById('archEditForm').addEventListener('submit',async e=>{
   e.preventDefault();
-  const id  = document.getElementById('rpId').value;
-  const pwd = document.getElementById('rpPwd').value;
-  if (pwd.length < 6) return toast('Min. 6 karakter', false);
-  const r = await fetch('/api/admin/reset-password', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({token:TOKEN,gameId:id,newPassword:pwd}) });
-  const d = await r.json();
-  if (d.success) { toast('Password berhasil direset!'); closeModal('rpModal'); }
-  else toast(d.error || 'Gagal', false);
+  const id=document.getElementById('aeId').value;
+  try{
+    await archApi('/api/admin/licenses/'+id,'PATCH',{ownerUserId:parseInt(document.getElementById('aeOwnerId').value),groupId:parseInt(document.getElementById('aeGroupId').value),enabled:document.getElementById('aeEnabled').value==='true'});
+    closeModal('archEditModal');toast('License berhasil diupdate! ✅');archLoadLicenses();
+  }catch(e){toast(e.message,false);}
 });
 
-// ─ View Donations ─────────────────────────────────────────────────────────────
-async function viewDonations(gameId, gameName) {
-  const card    = document.getElementById('donCard');
-  const title   = document.getElementById('donCardTitle');
-  const content = document.getElementById('donCardContent');
-  card.style.display = 'block';
-  title.textContent  = '📜 Donasi — ' + gameName;
-  content.innerHTML  = '<p style="color:#64748b;padding:16px 0">Loading…</p>';
-  card.scrollIntoView({ behavior:'smooth', block:'start' });
-  const r = await fetch('/api/admin/donations?token='+encodeURIComponent(TOKEN)+'&gameId='+gameId+'&limit=50&offset=0');
-  const d = await r.json();
-  if (!d.success || !d.donations.length) {
-    content.innerHTML = '<p style="color:#64748b;padding:16px 0">Belum ada donasi</p>';
-    return;
-  }
-  content.innerHTML = \`<div class="don-panel"><div class="tbl-wrap"><table>
-    <thead><tr><th>#</th><th>Waktu</th><th>Username</th><th>Nama</th><th>Platform</th><th>Jumlah</th><th>Pesan</th></tr></thead>
-    <tbody>\${d.donations.map((x,i) => \`
-      <tr>
-        <td style="color:#64748b">\${i+1}</td>
-        <td style="white-space:nowrap">\${fmtDate(x.donated_at)}</td>
-        <td><strong style="color:#10b981">\${x.username}</strong></td>
-        <td style="color:#94a3b8">\${x.display_name||'—'}</td>
-        <td>\${x.source||'?'}</td>
-        <td><strong>\${fmt(x.amount)}</strong></td>
-        <td style="color:#94a3b8;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">\${x.message||'—'}</td>
-      </tr>\`).join('')}
-    </tbody></table></div>
-    <p style="color:#64748b;font-size:12px;margin-top:12px">Menampilkan 50 terbaru. Total: \${d.total}</p>
-  </div>\`;
+async function archDeleteLicense(id){
+  if(!confirm('Hapus license ini? Semua session terkait juga akan dihapus.'))return;
+  try{await archApi('/api/admin/licenses/'+id,'DELETE');toast('License dihapus.');archLoadLicenses();archLoadAll();}
+  catch(e){toast(e.message,false);}
 }
-
-// Close modals on overlay click
-['rpModal','gameModal'].forEach(id => {
-  document.getElementById(id).addEventListener('click', e => { if (e.target.id === id) closeModal(id); });
-});
-document.getElementById('confirmDel').addEventListener('click', e => { if (e.target.id === 'confirmDel') closeConfirm(); });
 
 // Init
 loadUsers();
