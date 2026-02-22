@@ -196,9 +196,6 @@ function loadEnvGames() {
 async function authenticateGame(password) {
     if (!password) return null;
     try {
-        const { rows: allPwds } = await pool.query('SELECT game_id, LENGTH(password) as len FROM game_passwords');
-        console.log('[AUTH] passwords in DB:', allPwds.length, '| input len:', password.length);
-        allPwds.forEach(p => console.log('  game_id=' + p.game_id + ' pwd_len=' + p.len));
         const { rows } = await pool.query(`
             SELECT g.*
             FROM games g
@@ -206,8 +203,6 @@ async function authenticateGame(password) {
             WHERE gp.password = $1
             LIMIT 1
         `, [password]);
-        if (rows[0]) console.log('[AUTH] matched:', rows[0].id, rows[0].name);
-        else console.log('[AUTH] no match');
         return rows[0] ? rowToGame(rows[0]) : null;
     } catch (e) {
         console.error('authenticateGame error:', e.message);
@@ -653,311 +648,342 @@ app.get('/dashboard', async (req, res) => {
     const password = req.query.password;
     const game = await authenticateGame(password);
     if (!game) return res.redirect('/');
-    const baseUrl = `https://${req.get('host')}`;
-
-    // Escape semua nilai game untuk aman di template literal HTML
-    const esc = (s) => String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-
+    const baseUrl = 'https://' + req.get('host');
+    const G = JSON.stringify({
+        pwd:     password,
+        name:    game.name,
+        uid:     String(game.universeId),
+        topic:   String(game.topic),
+        hasSaw:  !!game.saweriaToken,
+        hasSb:   !!game.socialbuzzToken,
+        sawUrl:  baseUrl + '/' + game.webhookSecret + '/saweria',
+        sbUrl:   baseUrl + '/' + game.webhookSecret + '/socialbuzz',
+        testUrl: baseUrl + '/' + game.webhookSecret + '/test'
+    });
     res.send(`<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>${esc(game.name)} — Dashboard</title>
-  <style>
-    *{margin:0;padding:0;box-sizing:border-box}
-    body{font-family:'Segoe UI',system-ui,sans-serif;background:#0a0e27;color:#fff;min-height:100vh;padding:20px}
-    .container{max-width:1100px;margin:0 auto}
-    .header{background:linear-gradient(135deg,rgba(139,92,246,.2),rgba(59,130,246,.2));border:1px solid rgba(139,92,246,.3);border-radius:20px;padding:28px 32px;margin-bottom:28px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px}
-    .header h1{font-size:28px;background:linear-gradient(135deg,#8b5cf6,#3b82f6);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
-    .header p{color:#94a3b8;font-size:13px;margin-top:4px}
-    .hbtns{display:flex;gap:10px;flex-wrap:wrap}
-    .nav{display:flex;gap:10px;margin-bottom:24px;border-bottom:1px solid rgba(139,92,246,.15)}
-    .ntab{padding:10px 20px;background:none;border:none;border-bottom:2px solid transparent;color:#94a3b8;font-size:14px;font-weight:600;cursor:pointer;transition:all .3s;border-radius:8px 8px 0 0}
-    .ntab.active{color:#8b5cf6;border-bottom-color:#8b5cf6;background:rgba(139,92,246,.1)}
-    .ntab:hover{color:#8b5cf6}
-    .page{display:none}.page.active{display:block}
-    .card{background:rgba(15,23,42,.8);border:1px solid rgba(139,92,246,.2);border-radius:16px;padding:24px;margin-bottom:20px;backdrop-filter:blur(10px)}
-    .card h3{color:#8b5cf6;font-size:17px;margin-bottom:18px}
-    .sgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:20px}
-    .scard{background:rgba(15,23,42,.8);border:1px solid rgba(139,92,246,.2);border-radius:14px;padding:20px;text-align:center}
-    .scard .sv{font-size:30px;font-weight:700;background:linear-gradient(135deg,#8b5cf6,#3b82f6);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:6px}
-    .scard .sl{color:#94a3b8;font-size:12px;font-weight:500;text-transform:uppercase;letter-spacing:.5px}
-    .ir{display:flex;justify-content:space-between;padding:11px 0;border-bottom:1px solid rgba(139,92,246,.08);align-items:center;font-size:14px}
-    .ir:last-child{border:none}
-    .il{color:#94a3b8}.iv{color:#fff;font-weight:500}
-    .ub{background:rgba(0,0,0,.3);border:1px solid rgba(139,92,246,.2);border-radius:10px;padding:14px;margin:10px 0}
-    .ul{color:#8b5cf6;font-size:12px;font-weight:600;text-transform:uppercase;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center}
-    .ut{color:#10b981;font-family:'Courier New',monospace;font-size:12px;word-break:break-all;padding:10px;background:rgba(0,0,0,.4);border-radius:6px}
-    .btn{padding:9px 18px;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;transition:all .3s;display:inline-flex;align-items:center;gap:5px;background:linear-gradient(135deg,#8b5cf6,#3b82f6);color:#fff}
-    .btn:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(139,92,246,.4)}
-    .btn-sm{padding:6px 14px;font-size:12px}
-    .btn-sec{background:rgba(139,92,246,.2);border:1px solid rgba(139,92,246,.4)}
-    .btn-sec:hover{background:rgba(139,92,246,.3)}
-    .badge{display:inline-block;padding:3px 10px;border-radius:10px;font-size:12px;font-weight:600}
-    .bs{background:rgba(16,185,129,.15);color:#10b981;border:1px solid rgba(16,185,129,.3)}
-    .bw{background:rgba(245,158,11,.15);color:#f59e0b;border:1px solid rgba(245,158,11,.3)}
-    .bp{background:rgba(139,92,246,.15);color:#8b5cf6;border:1px solid rgba(139,92,246,.3)}
-    .tbl-wrap{overflow-x:auto}
-    table{width:100%;border-collapse:collapse;font-size:13px}
-    thead{background:rgba(139,92,246,.1)}
-    th{padding:12px 14px;text-align:left;color:#8b5cf6;font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.4px}
-    td{padding:12px 14px;color:#cbd5e1;border-bottom:1px solid rgba(139,92,246,.08)}
-    tr:last-child td{border:none}
-    tr:hover td{background:rgba(139,92,246,.04)}
-    .sbar{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap}
-    .sbar input{flex:1;min-width:180px;padding:10px 14px;background:rgba(15,23,42,.6);border:1.5px solid rgba(139,92,246,.2);border-radius:8px;color:#fff;font-size:13px;outline:none}
-    .sbar input:focus{border-color:#8b5cf6}
-    .pag{display:flex;justify-content:center;align-items:center;gap:8px;margin-top:16px;font-size:13px}
-    .pag span{color:#94a3b8}
-    .chart{display:flex;align-items:flex-end;gap:6px;height:80px;margin-top:8px}
-    .bar-wrap{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px}
-    .bar{width:100%;background:linear-gradient(to top,#8b5cf6,#3b82f6);border-radius:4px 4px 0 0;min-height:2px;transition:height .5s}
-    .bar-label{color:#64748b;font-size:10px;text-align:center}
-    .modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(5px);z-index:1000;justify-content:center;align-items:center;padding:20px}
-    .modal.active{display:flex}
-    .mc{background:rgba(15,23,42,.95);border:1px solid rgba(139,92,246,.3);border-radius:20px;padding:32px;max-width:480px;width:100%;animation:mfade .3s}
-    @keyframes mfade{from{opacity:0;transform:scale(.9)}to{opacity:1;transform:scale(1)}}
-    .mh{display:flex;justify-content:space-between;align-items:center;margin-bottom:22px}
-    .mh h2{color:#8b5cf6;font-size:22px}
-    .xbtn{background:none;border:none;color:#94a3b8;font-size:22px;cursor:pointer;width:30px;height:30px;display:flex;align-items:center;justify-content:center;border-radius:6px}
-    .xbtn:hover{background:rgba(139,92,246,.2);color:#8b5cf6}
-    .fg{margin-bottom:18px}
-    .fg label{display:block;color:#cbd5e1;font-size:14px;font-weight:500;margin-bottom:7px}
-    .fg input{width:100%;padding:11px 14px;background:rgba(15,23,42,.6);border:2px solid rgba(139,92,246,.2);border-radius:9px;color:#fff;font-size:14px;outline:none;transition:border-color .3s}
-    .fg input:focus{border-color:#8b5cf6}
-    .mf{display:flex;gap:10px;justify-content:flex-end;margin-top:20px}
-    .toast{position:fixed;top:20px;right:20px;padding:14px 22px;border-radius:12px;font-weight:600;display:none;z-index:2000;max-width:340px}
-    .tOk{background:rgba(16,185,129,.9);color:#fff}
-    .tErr{background:rgba(239,68,68,.9);color:#fff}
-    .err-box{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:10px;padding:16px;text-align:center;color:#fca5a5;font-size:13px}
-    .err-box button{margin-top:10px;padding:7px 16px;background:rgba(239,68,68,.2);border:1px solid rgba(239,68,68,.4);border-radius:8px;color:#fca5a5;cursor:pointer;font-size:12px}
-    @media(max-width:600px){.header{padding:20px;flex-direction:column}.card{padding:16px}}
-  </style>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dashboard</title>
+<script id="GD" type="application/json">${G}<\/script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#0a0e27;color:#fff;min-height:100vh;padding:20px}
+.container{max-width:1100px;margin:0 auto}
+.header{background:linear-gradient(135deg,rgba(139,92,246,.2),rgba(59,130,246,.2));border:1px solid rgba(139,92,246,.3);border-radius:20px;padding:28px 32px;margin-bottom:28px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px}
+.header h1{font-size:28px;background:linear-gradient(135deg,#8b5cf6,#3b82f6);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.hbtns{display:flex;gap:10px;flex-wrap:wrap}
+.nav{display:flex;gap:10px;margin-bottom:24px;border-bottom:1px solid rgba(139,92,246,.15)}
+.ntab{padding:10px 20px;background:none;border:none;border-bottom:2px solid transparent;color:#94a3b8;font-size:14px;font-weight:600;cursor:pointer;transition:all .3s;border-radius:8px 8px 0 0}
+.ntab.active{color:#8b5cf6;border-bottom-color:#8b5cf6;background:rgba(139,92,246,.1)}
+.page{display:none}.page.active{display:block}
+.card{background:rgba(15,23,42,.8);border:1px solid rgba(139,92,246,.2);border-radius:16px;padding:24px;margin-bottom:20px}
+.card h3{color:#8b5cf6;font-size:17px;margin-bottom:18px}
+.sgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:20px}
+.scard{background:rgba(15,23,42,.8);border:1px solid rgba(139,92,246,.2);border-radius:14px;padding:20px;text-align:center}
+.sv{font-size:30px;font-weight:700;background:linear-gradient(135deg,#8b5cf6,#3b82f6);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:6px}
+.sl{color:#94a3b8;font-size:12px;text-transform:uppercase;letter-spacing:.5px}
+.ir{display:flex;justify-content:space-between;padding:11px 0;border-bottom:1px solid rgba(139,92,246,.08);font-size:14px}
+.ir:last-child{border:none}
+.il{color:#94a3b8}.iv{color:#fff;font-weight:500}
+.ub{background:rgba(0,0,0,.3);border:1px solid rgba(139,92,246,.2);border-radius:10px;padding:14px;margin:10px 0}
+.ulb{color:#8b5cf6;font-size:12px;font-weight:600;text-transform:uppercase;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center}
+.ut{color:#10b981;font-family:monospace;font-size:12px;word-break:break-all;padding:10px;background:rgba(0,0,0,.4);border-radius:6px}
+.btn{padding:9px 18px;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;transition:all .3s;display:inline-flex;align-items:center;gap:5px;background:linear-gradient(135deg,#8b5cf6,#3b82f6);color:#fff}
+.btn:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(139,92,246,.4)}
+.btn-sm{padding:6px 14px;font-size:12px}
+.btn-sec{background:rgba(139,92,246,.2);border:1px solid rgba(139,92,246,.4)}
+.badge{display:inline-block;padding:3px 10px;border-radius:10px;font-size:12px;font-weight:600}
+.bs{background:rgba(16,185,129,.15);color:#10b981;border:1px solid rgba(16,185,129,.3)}
+.bw{background:rgba(245,158,11,.15);color:#f59e0b;border:1px solid rgba(245,158,11,.3)}
+.bp{background:rgba(139,92,246,.15);color:#8b5cf6;border:1px solid rgba(139,92,246,.3)}
+.tbl-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13px}
+thead{background:rgba(139,92,246,.1)}
+th{padding:12px 14px;text-align:left;color:#8b5cf6;font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.4px}
+td{padding:12px 14px;color:#cbd5e1;border-bottom:1px solid rgba(139,92,246,.08)}
+tr:last-child td{border:none}
+tr:hover td{background:rgba(139,92,246,.04)}
+.sbar{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap}
+.sbar input{flex:1;min-width:180px;padding:10px 14px;background:rgba(15,23,42,.6);border:1.5px solid rgba(139,92,246,.2);border-radius:8px;color:#fff;font-size:13px;outline:none}
+.sbar input:focus{border-color:#8b5cf6}
+.pag{display:flex;justify-content:center;align-items:center;gap:8px;margin-top:16px;font-size:13px;color:#94a3b8}
+.chart{display:flex;align-items:flex-end;gap:6px;height:80px;margin-top:8px}
+.bar-wrap{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px}
+.bar{width:100%;background:linear-gradient(to top,#8b5cf6,#3b82f6);border-radius:4px 4px 0 0;min-height:2px}
+.bar-label{color:#64748b;font-size:10px;text-align:center}
+.modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1000;justify-content:center;align-items:center;padding:20px}
+.modal.active{display:flex}
+.mc{background:rgba(15,23,42,.95);border:1px solid rgba(139,92,246,.3);border-radius:20px;padding:32px;max-width:480px;width:100%}
+.mh{display:flex;justify-content:space-between;align-items:center;margin-bottom:22px}
+.mh h2{color:#8b5cf6;font-size:22px}
+.xbtn{background:none;border:none;color:#94a3b8;font-size:22px;cursor:pointer;line-height:1}
+.fg{margin-bottom:18px}
+.fg label{display:block;color:#cbd5e1;font-size:14px;font-weight:500;margin-bottom:7px}
+.fg input{width:100%;padding:11px 14px;background:rgba(15,23,42,.6);border:2px solid rgba(139,92,246,.2);border-radius:9px;color:#fff;font-size:14px;outline:none}
+.fg input:focus{border-color:#8b5cf6}
+.mf{display:flex;gap:10px;justify-content:flex-end;margin-top:20px}
+.toast{position:fixed;top:20px;right:20px;padding:14px 22px;border-radius:12px;font-weight:600;display:none;z-index:2000;max-width:340px}
+.tok{background:rgba(16,185,129,.9);color:#fff}
+.terr{background:rgba(239,68,68,.9);color:#fff}
+</style>
 </head>
 <body>
-<div class="toast tOk" id="tOk"></div>
-<div class="toast tErr" id="tErr"></div>
-
+<div class="toast tok" id="tOk"></div>
+<div class="toast terr" id="tErr"></div>
 <div class="modal" id="cpModal">
   <div class="mc">
-    <div class="mh"><h2>🔐 Ganti Password</h2><button class="xbtn" onclick="closeCpModal()">×</button></div>
+    <div class="mh"><h2>Ganti Password</h2><button class="xbtn" id="cpClose">x</button></div>
     <div class="fg"><label>Password Saat Ini</label><input type="password" id="cpCur"></div>
-    <div class="fg"><label>Password Baru</label><input type="password" id="cpNew" minlength="6"></div>
-    <div class="fg"><label>Konfirmasi Password Baru</label><input type="password" id="cpCon" minlength="6"></div>
+    <div class="fg"><label>Password Baru</label><input type="password" id="cpNew"></div>
+    <div class="fg"><label>Konfirmasi Baru</label><input type="password" id="cpCon"></div>
     <div class="mf">
-      <button class="btn btn-sec" onclick="closeCpModal()">Batal</button>
-      <button class="btn" onclick="submitChangePwd()">Simpan</button>
+      <button class="btn btn-sec" id="cpCancel">Batal</button>
+      <button class="btn" id="cpSave">Simpan</button>
     </div>
   </div>
 </div>
-
 <div class="container">
   <div class="header">
-    <div><h1>🎮 ${esc(game.name)}</h1><p>Webhook Integration Dashboard</p></div>
+    <div><h1 id="hTitle">Dashboard</h1><p style="color:#94a3b8;font-size:13px;margin-top:4px">Webhook Integration Dashboard</p></div>
     <div class="hbtns">
-      <button class="btn btn-sec" onclick="document.getElementById('cpModal').classList.add('active')">🔑 Ganti Password</button>
-      <button class="btn btn-sec" onclick="location.href='/'">🚪 Logout</button>
+      <button class="btn btn-sec" id="btnPwd">Ganti Password</button>
+      <button class="btn btn-sec" id="btnOut">Logout</button>
     </div>
   </div>
   <div class="nav">
-    <button class="ntab active" id="tab-overview" onclick="switchPage('overview')">📊 Overview</button>
-    <button class="ntab" id="tab-history" onclick="switchPage('history')">📜 History</button>
-    <button class="ntab" id="tab-leaderboard" onclick="switchPage('leaderboard')">🏆 Leaderboard</button>
-    <button class="ntab" id="tab-settings" onclick="switchPage('settings')">⚙️ Settings</button>
+    <button class="ntab active" id="tab-overview">Overview</button>
+    <button class="ntab" id="tab-history">History</button>
+    <button class="ntab" id="tab-leaderboard">Leaderboard</button>
+    <button class="ntab" id="tab-settings">Settings</button>
   </div>
-
   <div class="page active" id="p-overview">
     <div class="sgrid">
-      <div class="scard"><div class="sv" id="sTotalAmount">—</div><div class="sl">Total Donasi</div></div>
-      <div class="scard"><div class="sv" id="sTotalCount">—</div><div class="sl">Transaksi</div></div>
-      <div class="scard"><div class="sv" id="sUniqueDonors">—</div><div class="sl">Donatur Unik</div></div>
+      <div class="scard"><div class="sv" id="sTotalAmount">-</div><div class="sl">Total Donasi</div></div>
+      <div class="scard"><div class="sv" id="sTotalCount">-</div><div class="sl">Transaksi</div></div>
+      <div class="scard"><div class="sv" id="sUniqueDonors">-</div><div class="sl">Donatur Unik</div></div>
     </div>
-    <div id="statsErr" style="display:none" class="err-box">
-      ❌ Gagal memuat statistik.<br><span id="statsErrMsg"></span>
-      <br><button onclick="loadStats()">↻ Coba Lagi</button>
-    </div>
-    <div class="card"><h3>📈 7 Hari Terakhir</h3><div class="chart" id="weekChart"><p style="color:#64748b;font-size:13px">Memuat…</p></div></div>
-    <div class="card">
-      <h3>📋 Info Game</h3>
-      <div class="ir"><span class="il">Universe ID</span><span class="iv">${esc(game.universeId)}</span></div>
-      <div class="ir"><span class="il">Topic</span><span class="iv">${esc(game.topic)}</span></div>
-      <div class="ir"><span class="il">Saweria Token</span><span class="iv"><span class="badge ${game.saweriaToken ? 'bs' : 'bw'}">${game.saweriaToken ? '✓ Set' : '⚠ Optional'}</span></span></div>
-      <div class="ir"><span class="il">SocialBuzz Token</span><span class="iv"><span class="badge ${game.socialbuzzToken ? 'bs' : 'bw'}">${game.socialbuzzToken ? '✓ Set' : '⚠ Optional'}</span></span></div>
-    </div>
+    <div class="card"><h3>7 Hari Terakhir</h3><div class="chart" id="weekChart"><p style="color:#64748b">Memuat...</p></div></div>
+    <div class="card"><h3>Info Game</h3><div id="gameInfo"></div></div>
   </div>
-
   <div class="page" id="p-history">
-    <div class="card">
-      <h3>📜 History Donasi</h3>
+    <div class="card"><h3>History Donasi</h3>
       <div class="sbar">
-        <input type="text" id="searchInput" placeholder="🔍 Cari username / nama…" oninput="debounceSearch()">
-        <button class="btn btn-sm" onclick="loadDonations(0)">Cari</button>
-        <button class="btn btn-sm btn-sec" onclick="exportCSV()">⬇ Export CSV</button>
+        <input type="text" id="searchInput" placeholder="Cari username...">
+        <button class="btn btn-sm" id="btnCari">Cari</button>
+        <button class="btn btn-sm btn-sec" id="btnExport">Export CSV</button>
       </div>
-      <div id="donErr" style="display:none" class="err-box">❌ <span id="donErrMsg"></span><br><button onclick="loadDonations(0)">↻ Coba Lagi</button></div>
-      <div class="tbl-wrap">
-        <table>
-          <thead><tr><th>#</th><th>Waktu</th><th>Username</th><th>Nama</th><th>Platform</th><th>Jumlah</th><th>Pesan</th></tr></thead>
-          <tbody id="donTbody"></tbody>
-        </table>
-      </div>
+      <div class="tbl-wrap"><table>
+        <thead><tr><th>#</th><th>Waktu</th><th>Username</th><th>Nama</th><th>Platform</th><th>Jumlah</th><th>Pesan</th></tr></thead>
+        <tbody id="donTbody"></tbody>
+      </table></div>
       <div class="pag" id="pagination"></div>
     </div>
   </div>
-
   <div class="page" id="p-leaderboard">
-    <div class="card">
-      <h3>🏆 Top Donatur</h3>
-      <div id="lbErr" style="display:none" class="err-box">❌ <span id="lbErrMsg"></span><br><button onclick="loadLeaderboard()">↻ Coba Lagi</button></div>
-      <div class="tbl-wrap">
-        <table>
-          <thead><tr><th>Rank</th><th>Username</th><th>Nama</th><th>Jumlah Donasi</th><th>Total</th><th>Terakhir</th></tr></thead>
-          <tbody id="lbTbody"></tbody>
-        </table>
-      </div>
+    <div class="card"><h3>Top Donatur</h3>
+      <div class="tbl-wrap"><table>
+        <thead><tr><th>Rank</th><th>Username</th><th>Nama</th><th>Donasi</th><th>Total</th><th>Terakhir</th></tr></thead>
+        <tbody id="lbTbody"></tbody>
+      </table></div>
     </div>
   </div>
-
   <div class="page" id="p-settings">
-    <div class="card">
-      <h3>🔗 Webhook URLs</h3>
-      <div class="ub"><div class="ul"><span>📡 Saweria</span><button class="btn btn-sm" onclick="copyText('sawURL')">📋 Copy</button></div><div class="ut" id="sawURL"></div></div>
-      <div class="ub"><div class="ul"><span>📡 SocialBuzz</span><button class="btn btn-sm" onclick="copyText('sbURL')">📋 Copy</button></div><div class="ut" id="sbURL"></div></div>
-      <div class="ub"><div class="ul"><span>🧪 Test</span><button class="btn btn-sm" onclick="copyText('testURL')">📋 Copy</button></div><div class="ut" id="testURL"></div></div>
-    </div>
-    <div class="card">
-      <h3>💡 Format Username</h3>
-      <div style="color:#94a3b8;font-size:13px;line-height:2.2">
-        <p>• <code style="color:#10b981">[RobloxUsername] Pesan</code></p>
-        <p>• <code style="color:#10b981">@RobloxUsername Pesan</code></p>
-        <p>• <code style="color:#10b981">RobloxUsername: Pesan</code></p>
-        <p>• <code style="color:#10b981">RobloxUsername123</code> (kata pertama mengandung angka/underscore)</p>
-      </div>
+    <div class="card"><h3>Webhook URLs</h3>
+      <div class="ub"><div class="ulb"><span>Saweria</span><button class="btn btn-sm" id="cpySaw">Copy</button></div><div class="ut" id="sawURL"></div></div>
+      <div class="ub"><div class="ulb"><span>SocialBuzz</span><button class="btn btn-sm" id="cpySb">Copy</button></div><div class="ut" id="sbURL"></div></div>
+      <div class="ub"><div class="ulb"><span>Test URL</span><button class="btn btn-sm" id="cpyTest">Copy</button></div><div class="ut" id="testURL"></div></div>
     </div>
   </div>
 </div>
-
 <script>
-var _PWD     = ${JSON.stringify(String(password))};
-var _SAWURL  = ${JSON.stringify(baseUrl + '/' + String(game.webhookSecret) + '/saweria')};
-var _SBURL   = ${JSON.stringify(baseUrl + '/' + String(game.webhookSecret) + '/socialbuzz')};
-var _TESTURL = ${JSON.stringify(baseUrl + '/' + String(game.webhookSecret) + '/test')};
-var _donPage=0,_donTotal=0,_donLimit=50,_searchTimer=null;
+(function() {
+  var G = JSON.parse(document.getElementById('GD').textContent);
+  var donPage=0, donTotal=0, donLimit=50, searchTimer=null;
 
-function switchPage(id){
-  document.querySelectorAll('.ntab').forEach(function(t){t.classList.remove('active');});
-  document.querySelectorAll('.page').forEach(function(p){p.classList.remove('active');});
-  document.getElementById('tab-'+id).classList.add('active');
-  document.getElementById('p-'+id).classList.add('active');
-  if(id==='history') loadDonations(0);
-  if(id==='leaderboard') loadLeaderboard();
-  if(id==='settings'){
-    document.getElementById('sawURL').textContent=_SAWURL;
-    document.getElementById('sbURL').textContent=_SBURL;
-    document.getElementById('testURL').textContent=_TESTURL+'?password='+encodeURIComponent(_PWD);
-  }
-}
-function fmt(n){return new Intl.NumberFormat('id-ID',{style:'currency',currency:'IDR',minimumFractionDigits:0}).format(n);}
-function fmtDate(s){return new Date(s).toLocaleString('id-ID',{dateStyle:'short',timeStyle:'short'});}
-function showToast(msg,ok){var el=document.getElementById(ok?'tOk':'tErr');el.textContent=msg;el.style.display='block';setTimeout(function(){el.style.display='none';},3500);}
-function copyText(id){navigator.clipboard.writeText(document.getElementById(id).textContent).then(function(){showToast('URL disalin!',true);}).catch(function(){showToast('Gagal copy',false);});}
-function sourceBadge(s){var m={Saweria:'bs',SocialBuzz:'bp',Test:'bw'};return '<span class="badge '+(m[s]||'bw')+'">'+s+'</span>';}
-function debounceSearch(){clearTimeout(_searchTimer);_searchTimer=setTimeout(function(){loadDonations(0);},400);}
-function closeCpModal(){document.getElementById('cpModal').classList.remove('active');}
-document.getElementById('cpModal').addEventListener('click',function(e){if(e.target.id==='cpModal')closeCpModal();});
-function submitChangePwd(){
-  var cur=document.getElementById('cpCur').value,nw=document.getElementById('cpNew').value,con=document.getElementById('cpCon').value;
-  if(nw!==con)return showToast('Password baru tidak cocok',false);
-  if(nw.length<6)return showToast('Minimal 6 karakter',false);
-  fetch('/api/user/change-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({currentPassword:cur,newPassword:nw})})
-  .then(function(r){return r.json();}).then(function(d){
-    if(d.success){showToast('Password berhasil diubah!',true);closeCpModal();setTimeout(function(){location.href='/dashboard?password='+encodeURIComponent(nw);},1500);}
-    else showToast(d.error||'Gagal',false);
-  }).catch(function(){showToast('Connection error',false);});
-}
-function loadStats(){
-  fetch('/api/user/donations/stats?password='+encodeURIComponent(_PWD))
-  .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();})
-  .then(function(d){
-    if(!d.success)throw new Error(d.error||'Unauthorized');
-    document.getElementById('sTotalAmount').textContent=fmt(d.totals.total_amount||0);
-    document.getElementById('sTotalCount').textContent=Number(d.totals.total_donations||0).toLocaleString();
-    document.getElementById('sUniqueDonors').textContent=Number(d.totals.unique_donors||0).toLocaleString();
-    var days=d.recent7||[];
-    if(!days.length){document.getElementById('weekChart').innerHTML='<p style="color:#64748b;font-size:13px">Belum ada data minggu ini</p>';return;}
-    var max=Math.max.apply(null,days.map(function(x){return parseInt(x.amount)||0;}).concat([1]));
-    document.getElementById('weekChart').innerHTML=days.map(function(day){
-      var pct=Math.max(4,Math.round((parseInt(day.amount)||0)/max*100));
-      var label=new Date(day.day).toLocaleDateString('id-ID',{weekday:'short',day:'numeric'});
-      return '<div class="bar-wrap"><div class="bar" style="height:'+pct+'%" title="'+fmt(day.amount)+'"></div><div class="bar-label">'+label+'</div></div>';
-    }).join('');
-  }).catch(function(e){
-    document.getElementById('sTotalAmount').textContent='Error';
-    document.getElementById('weekChart').innerHTML='<p style="color:#ef4444;font-size:13px">Gagal: '+e.message+'</p>';
+  // Titles & info
+  document.getElementById('hTitle').textContent = G.name;
+  document.getElementById('gameInfo').innerHTML =
+    '<div class="ir"><span class="il">Universe ID</span><span class="iv">' + G.uid + '</span></div>' +
+    '<div class="ir"><span class="il">Topic</span><span class="iv">' + G.topic + '</span></div>' +
+    '<div class="ir"><span class="il">Saweria</span><span class="iv"><span class="badge ' + (G.hasSaw?'bs':'bw') + '">' + (G.hasSaw?'Set':'Optional') + '</span></span></div>' +
+    '<div class="ir"><span class="il">SocialBuzz</span><span class="iv"><span class="badge ' + (G.hasSb?'bs':'bw') + '">' + (G.hasSb?'Set':'Optional') + '</span></span></div>';
+
+  // Tab navigation
+  ['overview','history','leaderboard','settings'].forEach(function(id) {
+    document.getElementById('tab-' + id).addEventListener('click', function() {
+      ['overview','history','leaderboard','settings'].forEach(function(x) {
+        document.getElementById('tab-' + x).classList.remove('active');
+        document.getElementById('p-' + x).classList.remove('active');
+      });
+      document.getElementById('tab-' + id).classList.add('active');
+      document.getElementById('p-' + id).classList.add('active');
+      if (id === 'history') loadDonations(0);
+      if (id === 'leaderboard') loadLeaderboard();
+      if (id === 'settings') {
+        document.getElementById('sawURL').textContent  = G.sawUrl;
+        document.getElementById('sbURL').textContent   = G.sbUrl;
+        document.getElementById('testURL').textContent = G.testUrl + '?password=' + encodeURIComponent(G.pwd);
+      }
+    });
   });
-}
-function loadDonations(offset){
-  if(offset===undefined)offset=0;
-  _donPage=offset;
-  var search=document.getElementById('searchInput').value.trim();
-  var tbody=document.getElementById('donTbody');
-  tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:24px;color:#64748b">Memuat...</td></tr>';
-  fetch('/api/user/donations?password='+encodeURIComponent(_PWD)+'&limit='+_donLimit+'&offset='+offset+'&search='+encodeURIComponent(search))
-  .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();})
-  .then(function(d){
-    if(!d.success){tbody.innerHTML='<tr><td colspan="7" style="text-align:center;color:#ef4444">'+d.error+'</td></tr>';return;}
-    _donTotal=d.total;
-    if(!d.donations.length){tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:30px;color:#64748b">Belum ada donasi</td></tr>';renderPagination();return;}
-    tbody.innerHTML=d.donations.map(function(don,i){
-      return '<tr><td style="color:#64748b">'+(offset+i+1)+'</td><td style="white-space:nowrap">'+fmtDate(don.donated_at)+'</td><td><strong style="color:#10b981">'+(don.username||'')+'</strong></td><td style="color:#94a3b8">'+(don.display_name||'&mdash;')+'</td><td>'+sourceBadge(don.source||'?')+'</td><td><strong>'+fmt(don.amount)+'</strong></td><td style="color:#94a3b8;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(don.message||'&mdash;')+'</td></tr>';
-    }).join('');
-    renderPagination();
-  }).catch(function(e){tbody.innerHTML='<tr><td colspan="7" style="text-align:center;color:#ef4444">Error: '+e.message+'</td></tr>';});
-}
-function renderPagination(){
-  var pages=Math.ceil(_donTotal/_donLimit),cur=Math.floor(_donPage/_donLimit);
-  var el=document.getElementById('pagination');
-  if(pages<=1){el.innerHTML='';return;}
-  el.innerHTML='<button class="btn btn-sm btn-sec"'+(cur===0?' disabled':'')+' onclick="loadDonations('+(cur-1)*_donLimit+')">Prev</button><span>'+(cur+1)+'/'+pages+' ('+_donTotal+')</span><button class="btn btn-sm btn-sec"'+(cur>=pages-1?' disabled':'')+' onclick="loadDonations('+(cur+1)*_donLimit+')">Next</button>';
-}
-function loadLeaderboard(){
-  var tbody=document.getElementById('lbTbody');
-  tbody.innerHTML='<tr><td colspan="6" style="text-align:center;padding:24px;color:#64748b">Memuat...</td></tr>';
-  fetch('/api/user/donations/stats?password='+encodeURIComponent(_PWD))
-  .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();})
-  .then(function(d){
-    if(!d.success){tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:#ef4444">'+d.error+'</td></tr>';return;}
-    if(!d.byUser||!d.byUser.length){tbody.innerHTML='<tr><td colspan="6" style="text-align:center;padding:30px;color:#64748b">Belum ada data</td></tr>';return;}
-    var medals=['🥇','🥈','🥉'];
-    tbody.innerHTML=d.byUser.map(function(u,i){
-      return '<tr><td><strong style="font-size:18px">'+(medals[i]||'#'+(i+1))+'</strong></td><td><strong style="color:#10b981">'+u.username+'</strong></td><td style="color:#94a3b8">'+(u.display_name||'&mdash;')+'</td><td><span class="badge bp">'+u.donation_count+'x</span></td><td><strong style="color:#f59e0b">'+fmt(u.total_amount)+'</strong></td><td style="color:#64748b;font-size:12px">'+fmtDate(u.last_donation)+'</td></tr>';
-    }).join('');
-  }).catch(function(e){tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:#ef4444">Error: '+e.message+'</td></tr>';});
-}
-function exportCSV(){
-  showToast('Mengambil data...',true);
-  fetch('/api/user/donations?password='+encodeURIComponent(_PWD)+'&limit=5000&offset=0')
-  .then(function(r){return r.json();}).then(function(d){
-    if(!d.success){showToast('Gagal export',false);return;}
-    var rows=d.donations.map(function(x,i){return [i+1,new Date(x.donated_at).toISOString(),x.username,x.display_name,x.source,x.amount,(x.message||'').replace(/,/g,' ')].join(',');});
-    var a=document.createElement('a');
-    a.href=URL.createObjectURL(new Blob([['No,Waktu,Username,Nama,Platform,Jumlah,Pesan'].concat(rows).join('\n')],{type:'text/csv'}));
-    a.download='donasi_'+Date.now()+'.csv';a.click();
-    showToast('Export berhasil!',true);
-  }).catch(function(){showToast('Gagal export',false);});
-}
-loadStats();
-</script>
+
+  // Buttons
+  document.getElementById('btnPwd').addEventListener('click', function() { document.getElementById('cpModal').classList.add('active'); });
+  document.getElementById('btnOut').addEventListener('click', function() { location.href = '/'; });
+  document.getElementById('cpClose').addEventListener('click', function() { document.getElementById('cpModal').classList.remove('active'); });
+  document.getElementById('cpCancel').addEventListener('click', function() { document.getElementById('cpModal').classList.remove('active'); });
+  document.getElementById('cpModal').addEventListener('click', function(e) { if (e.target.id === 'cpModal') document.getElementById('cpModal').classList.remove('active'); });
+  document.getElementById('cpSave').addEventListener('click', doChangePwd);
+  document.getElementById('btnCari').addEventListener('click', function() { loadDonations(0); });
+  document.getElementById('btnExport').addEventListener('click', exportCSV);
+  document.getElementById('searchInput').addEventListener('input', function() { clearTimeout(searchTimer); searchTimer = setTimeout(function(){loadDonations(0);}, 400); });
+  document.getElementById('cpySaw').addEventListener('click', function() { copyUrl('sawURL'); });
+  document.getElementById('cpySb').addEventListener('click', function() { copyUrl('sbURL'); });
+  document.getElementById('cpyTest').addEventListener('click', function() { copyUrl('testURL'); });
+
+  // Utils
+  function fmt(n) { return new Intl.NumberFormat('id-ID',{style:'currency',currency:'IDR',minimumFractionDigits:0}).format(n); }
+  function fmtDate(s) { return new Date(s).toLocaleString('id-ID',{dateStyle:'short',timeStyle:'short'}); }
+  function showToast(msg, ok) {
+    var el = document.getElementById(ok ? 'tOk' : 'tErr');
+    el.textContent = msg; el.style.display = 'block';
+    setTimeout(function(){ el.style.display = 'none'; }, 3500);
+  }
+  function copyUrl(id) {
+    navigator.clipboard.writeText(document.getElementById(id).textContent)
+      .then(function(){ showToast('URL disalin!', true); })
+      .catch(function(){ showToast('Gagal copy', false); });
+  }
+  function srcBadge(s) {
+    var c = {Saweria:'bs', SocialBuzz:'bp', Test:'bw'};
+    return '<span class="badge ' + (c[s]||'bw') + '">' + (s||'?') + '</span>';
+  }
+
+  function doChangePwd() {
+    var cur = document.getElementById('cpCur').value;
+    var nw  = document.getElementById('cpNew').value;
+    var con = document.getElementById('cpCon').value;
+    if (nw !== con)    return showToast('Password baru tidak cocok', false);
+    if (nw.length < 6) return showToast('Minimal 6 karakter', false);
+    fetch('/api/user/change-password', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({currentPassword: cur, newPassword: nw})
+    }).then(function(r){ return r.json(); }).then(function(d) {
+      if (d.success) {
+        showToast('Berhasil!', true);
+        document.getElementById('cpModal').classList.remove('active');
+        setTimeout(function(){ location.href = '/dashboard?password=' + encodeURIComponent(nw); }, 1500);
+      } else showToast(d.error || 'Gagal', false);
+    }).catch(function(){ showToast('Connection error', false); });
+  }
+
+  function loadStats() {
+    fetch('/api/user/donations/stats?password=' + encodeURIComponent(G.pwd))
+    .then(function(r){ if(!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    .then(function(d) {
+      if (!d.success) throw new Error(d.error || 'Error');
+      document.getElementById('sTotalAmount').textContent  = fmt(d.totals.total_amount || 0);
+      document.getElementById('sTotalCount').textContent   = Number(d.totals.total_donations || 0).toLocaleString();
+      document.getElementById('sUniqueDonors').textContent = Number(d.totals.unique_donors || 0).toLocaleString();
+      var days = d.recent7 || [];
+      if (!days.length) { document.getElementById('weekChart').innerHTML = '<p style="color:#64748b;font-size:13px">Belum ada data minggu ini</p>'; return; }
+      var max = Math.max.apply(null, days.map(function(x){ return parseInt(x.amount)||0; }).concat([1]));
+      document.getElementById('weekChart').innerHTML = days.map(function(day) {
+        var pct = Math.max(4, Math.round((parseInt(day.amount)||0) / max * 100));
+        var lbl = new Date(day.day).toLocaleDateString('id-ID', {weekday:'short', day:'numeric'});
+        return '<div class="bar-wrap"><div class="bar" style="height:' + pct + '%" title="' + fmt(day.amount) + '"></div><div class="bar-label">' + lbl + '</div></div>';
+      }).join('');
+    }).catch(function(e) {
+      document.getElementById('sTotalAmount').textContent = 'Error';
+      document.getElementById('weekChart').innerHTML = '<p style="color:#ef4444;font-size:13px">Gagal: ' + e.message + '</p>';
+    });
+  }
+
+  function loadDonations(offset) {
+    if (offset === undefined) offset = 0;
+    donPage = offset;
+    var search = document.getElementById('searchInput').value.trim();
+    var tbody  = document.getElementById('donTbody');
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px;color:#64748b">Memuat...</td></tr>';
+    fetch('/api/user/donations?password=' + encodeURIComponent(G.pwd) + '&limit=' + donLimit + '&offset=' + offset + '&search=' + encodeURIComponent(search))
+    .then(function(r){ if(!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    .then(function(d) {
+      if (!d.success) { tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#ef4444">' + d.error + '</td></tr>'; return; }
+      donTotal = d.total;
+      if (!d.donations.length) { tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:30px;color:#64748b">Belum ada donasi</td></tr>'; renderPag(); return; }
+      tbody.innerHTML = d.donations.map(function(don, i) {
+        var msg = (don.message || '-').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        return '<tr>' +
+          '<td style="color:#64748b">' + (offset+i+1) + '</td>' +
+          '<td style="white-space:nowrap">' + fmtDate(don.donated_at) + '</td>' +
+          '<td><strong style="color:#10b981">' + (don.username||'') + '</strong></td>' +
+          '<td style="color:#94a3b8">' + (don.display_name||'-') + '</td>' +
+          '<td>' + srcBadge(don.source) + '</td>' +
+          '<td><strong>' + fmt(don.amount) + '</strong></td>' +
+          '<td style="color:#94a3b8;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + msg + '</td>' +
+          '</tr>';
+      }).join('');
+      renderPag();
+    }).catch(function(e){ tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#ef4444">Error: ' + e.message + '</td></tr>'; });
+  }
+
+  function renderPag() {
+    var pages = Math.ceil(donTotal / donLimit), cur = Math.floor(donPage / donLimit);
+    var el = document.getElementById('pagination');
+    if (pages <= 1) { el.innerHTML = ''; return; }
+    var prev = (cur-1)*donLimit, next = (cur+1)*donLimit;
+    el.innerHTML =
+      '<button class="btn btn-sm btn-sec"' + (cur===0?' disabled':'') + ' id="pagPrev">Prev</button>' +
+      '<span>' + (cur+1) + ' / ' + pages + ' (' + donTotal + ')</span>' +
+      '<button class="btn btn-sm btn-sec"' + (cur>=pages-1?' disabled':'') + ' id="pagNext">Next</button>';
+    if (cur > 0) document.getElementById('pagPrev').addEventListener('click', function(){ loadDonations(prev); });
+    if (cur < pages-1) document.getElementById('pagNext').addEventListener('click', function(){ loadDonations(next); });
+  }
+
+  function loadLeaderboard() {
+    var tbody = document.getElementById('lbTbody');
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:#64748b">Memuat...</td></tr>';
+    fetch('/api/user/donations/stats?password=' + encodeURIComponent(G.pwd))
+    .then(function(r){ if(!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    .then(function(d) {
+      if (!d.success || !d.byUser || !d.byUser.length) { tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:30px;color:#64748b">Belum ada data</td></tr>'; return; }
+      var med = ['🥇','🥈','🥉'];
+      tbody.innerHTML = d.byUser.map(function(u, i) {
+        return '<tr>' +
+          '<td><strong>' + (med[i]||'#'+(i+1)) + '</strong></td>' +
+          '<td><strong style="color:#10b981">' + u.username + '</strong></td>' +
+          '<td style="color:#94a3b8">' + (u.display_name||'-') + '</td>' +
+          '<td><span class="badge bp">' + u.donation_count + 'x</span></td>' +
+          '<td><strong style="color:#f59e0b">' + fmt(u.total_amount) + '</strong></td>' +
+          '<td style="color:#64748b;font-size:12px">' + fmtDate(u.last_donation) + '</td>' +
+          '</tr>';
+      }).join('');
+    }).catch(function(e){ tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#ef4444">Error: ' + e.message + '</td></tr>'; });
+  }
+
+  function exportCSV() {
+    showToast('Mengambil data...', true);
+    fetch('/api/user/donations?password=' + encodeURIComponent(G.pwd) + '&limit=5000&offset=0')
+    .then(function(r){ return r.json(); }).then(function(d) {
+      if (!d.success) { showToast('Gagal', false); return; }
+      var rows = d.donations.map(function(x, i) {
+        return [i+1, new Date(x.donated_at).toISOString(), x.username, x.display_name, x.source, x.amount, (x.message||'').replace(/,/g,' ')].join(',');
+      });
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([['No,Waktu,Username,Nama,Platform,Jumlah,Pesan'].concat(rows).join('\n')], {type:'text/csv'}));
+      a.download = 'donasi_' + Date.now() + '.csv';
+      a.click();
+      showToast('Export berhasil!', true);
+    }).catch(function(){ showToast('Gagal export', false); });
+  }
+
+  loadStats();
+})();
+<\/script>
 </body></html>`);
 });
 
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  Admin Dashboard
-// ─────────────────────────────────────────────────────────────────────────────
-// ─────────────────────────────────────────────────────────────────────────────
-//  Admin Dashboard
-// ─────────────────────────────────────────────────────────────────────────────
 app.get('/admin/dashboard', (req, res) => {
     const token = req.query.token;
     if (!token || !adminFromToken(token)) return res.redirect('/');
