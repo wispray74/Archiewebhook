@@ -838,260 +838,115 @@ app.get('/dashboard', async (req, res) => {
 </div>
 
 <script>
-(function() {
-  // Semua data game diambil dari server-side via JSON.stringify — aman dari injection
-  var CFG = {
-    pwd:     ${JSON.stringify(String(password))},
-    sawUrl:  ${JSON.stringify(baseUrl + '/' + String(game.webhookSecret) + '/saweria')},
-    sbUrl:   ${JSON.stringify(baseUrl + '/' + String(game.webhookSecret) + '/socialbuzz')},
-    testUrl: ${JSON.stringify(baseUrl + '/' + String(game.webhookSecret) + '/test')}
-  };
+var _PWD     = ${JSON.stringify(String(password))};
+var _SAWURL  = ${JSON.stringify(baseUrl + '/' + String(game.webhookSecret) + '/saweria')};
+var _SBURL   = ${JSON.stringify(baseUrl + '/' + String(game.webhookSecret) + '/socialbuzz')};
+var _TESTURL = ${JSON.stringify(baseUrl + '/' + String(game.webhookSecret) + '/test')};
+var _donPage=0,_donTotal=0,_donLimit=50,_searchTimer=null;
 
-  var donPage=0, donTotal=0, donLimit=50, searchTimer=null, statsLoaded=false, lbLoaded=false;
-  var settingsUrlsSet = false;
-
-  // ─ navigation ──────────────────────────────────────────────────────────────
-  window.switchPage = switchPage;
-  function switchPage(id) {
-    ['overview','history','leaderboard','settings'].forEach(function(x) {
-      document.getElementById('tab-'+x).classList.remove('active');
-      document.getElementById('p-'+x).classList.remove('active');
-    });
-    document.getElementById('tab-'+id).classList.add('active');
-    document.getElementById('p-'+id).classList.add('active');
-    if (id === 'overview' && !statsLoaded)   loadStats();
-    if (id === 'history')                    loadDonations(0);
-    if (id === 'leaderboard' && !lbLoaded)   loadLeaderboard();
-    // Set URL text hanya saat tab settings dibuka, setelah DOM pasti visible
-    if (id === 'settings' && !settingsUrlsSet) {
-      settingsUrlsSet = true;
-      document.getElementById('sawURL').textContent  = CFG.sawUrl;
-      document.getElementById('sbURL').textContent   = CFG.sbUrl;
-      document.getElementById('testURL').textContent = CFG.testUrl + '?password=' + encodeURIComponent(CFG.pwd);
-    }
-  };
-
-  // ─ utils ───────────────────────────────────────────────────────────────────
-  function fmt(n) {
-    return new Intl.NumberFormat('id-ID',{style:'currency',currency:'IDR',minimumFractionDigits:0}).format(n);
+function switchPage(id){
+  document.querySelectorAll('.ntab').forEach(function(t){t.classList.remove('active');});
+  document.querySelectorAll('.page').forEach(function(p){p.classList.remove('active');});
+  document.getElementById('tab-'+id).classList.add('active');
+  document.getElementById('p-'+id).classList.add('active');
+  if(id==='history') loadDonations(0);
+  if(id==='leaderboard') loadLeaderboard();
+  if(id==='settings'){
+    document.getElementById('sawURL').textContent=_SAWURL;
+    document.getElementById('sbURL').textContent=_SBURL;
+    document.getElementById('testURL').textContent=_TESTURL+'?password='+encodeURIComponent(_PWD);
   }
-  function fmtDate(s) {
-    return new Date(s).toLocaleString('id-ID',{dateStyle:'short',timeStyle:'short'});
-  }
-  function showToast(msg, ok) {
-    var el = document.getElementById(ok ? 'tOk' : 'tErr');
-    el.textContent = msg; el.style.display = 'block';
-    setTimeout(function(){ el.style.display = 'none'; }, 3500);
-  }
-  window.copyText = copyText;
-  function copyText(id) {
-    var text = document.getElementById(id).textContent;
-    navigator.clipboard.writeText(text)
-      .then(function(){ showToast('URL disalin!', true); })
-      .catch(function(){ showToast('Gagal copy', false); });
-  };
-  function sourceBadge(s) {
-    var m = {Saweria:'bs',SocialBuzz:'bp',Test:'bw'};
-    return '<span class="badge '+(m[s]||'bw')+'">'+s+'</span>';
-  }
-  function showErr(boxId, msgId, msg) {
-    document.getElementById(boxId).style.display = 'block';
-    document.getElementById(msgId).textContent = msg;
-  }
-  function hideErr(boxId) {
-    document.getElementById(boxId).style.display = 'none';
-  }
-
-  // ─ modal ───────────────────────────────────────────────────────────────────
-  window.closeCpModal = closeCpModal;
-  function closeCpModal() {
-    document.getElementById('cpModal').classList.remove('active');
-  };
-  document.getElementById('cpModal').addEventListener('click', function(e) {
-    if (e.target.id === 'cpModal') closeCpModal();
+}
+function fmt(n){return new Intl.NumberFormat('id-ID',{style:'currency',currency:'IDR',minimumFractionDigits:0}).format(n);}
+function fmtDate(s){return new Date(s).toLocaleString('id-ID',{dateStyle:'short',timeStyle:'short'});}
+function showToast(msg,ok){var el=document.getElementById(ok?'tOk':'tErr');el.textContent=msg;el.style.display='block';setTimeout(function(){el.style.display='none';},3500);}
+function copyText(id){navigator.clipboard.writeText(document.getElementById(id).textContent).then(function(){showToast('URL disalin!',true);}).catch(function(){showToast('Gagal copy',false);});}
+function sourceBadge(s){var m={Saweria:'bs',SocialBuzz:'bp',Test:'bw'};return '<span class="badge '+(m[s]||'bw')+'">'+s+'</span>';}
+function debounceSearch(){clearTimeout(_searchTimer);_searchTimer=setTimeout(function(){loadDonations(0);},400);}
+function closeCpModal(){document.getElementById('cpModal').classList.remove('active');}
+document.getElementById('cpModal').addEventListener('click',function(e){if(e.target.id==='cpModal')closeCpModal();});
+function submitChangePwd(){
+  var cur=document.getElementById('cpCur').value,nw=document.getElementById('cpNew').value,con=document.getElementById('cpCon').value;
+  if(nw!==con)return showToast('Password baru tidak cocok',false);
+  if(nw.length<6)return showToast('Minimal 6 karakter',false);
+  fetch('/api/user/change-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({currentPassword:cur,newPassword:nw})})
+  .then(function(r){return r.json();}).then(function(d){
+    if(d.success){showToast('Password berhasil diubah!',true);closeCpModal();setTimeout(function(){location.href='/dashboard?password='+encodeURIComponent(nw);},1500);}
+    else showToast(d.error||'Gagal',false);
+  }).catch(function(){showToast('Connection error',false);});
+}
+function loadStats(){
+  fetch('/api/user/donations/stats?password='+encodeURIComponent(_PWD))
+  .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();})
+  .then(function(d){
+    if(!d.success)throw new Error(d.error||'Unauthorized');
+    document.getElementById('sTotalAmount').textContent=fmt(d.totals.total_amount||0);
+    document.getElementById('sTotalCount').textContent=Number(d.totals.total_donations||0).toLocaleString();
+    document.getElementById('sUniqueDonors').textContent=Number(d.totals.unique_donors||0).toLocaleString();
+    var days=d.recent7||[];
+    if(!days.length){document.getElementById('weekChart').innerHTML='<p style="color:#64748b;font-size:13px">Belum ada data minggu ini</p>';return;}
+    var max=Math.max.apply(null,days.map(function(x){return parseInt(x.amount)||0;}).concat([1]));
+    document.getElementById('weekChart').innerHTML=days.map(function(day){
+      var pct=Math.max(4,Math.round((parseInt(day.amount)||0)/max*100));
+      var label=new Date(day.day).toLocaleDateString('id-ID',{weekday:'short',day:'numeric'});
+      return '<div class="bar-wrap"><div class="bar" style="height:'+pct+'%" title="'+fmt(day.amount)+'"></div><div class="bar-label">'+label+'</div></div>';
+    }).join('');
+  }).catch(function(e){
+    document.getElementById('sTotalAmount').textContent='Error';
+    document.getElementById('weekChart').innerHTML='<p style="color:#ef4444;font-size:13px">Gagal: '+e.message+'</p>';
   });
-  window.submitChangePwd = submitChangePwd;
-  function submitChangePwd() {
-    var cur = document.getElementById('cpCur').value;
-    var nw  = document.getElementById('cpNew').value;
-    var con = document.getElementById('cpCon').value;
-    if (nw !== con)    return showToast('Password baru tidak cocok', false);
-    if (nw.length < 6) return showToast('Minimal 6 karakter', false);
-    fetch('/api/user/change-password', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({currentPassword: cur, newPassword: nw})
-    })
-    .then(function(r){ return r.json(); })
-    .then(function(d) {
-      if (d.success) {
-        showToast('Password berhasil diubah!', true);
-        closeCpModal();
-        setTimeout(function(){
-          location.href = '/dashboard?password=' + encodeURIComponent(nw);
-        }, 1500);
-      } else {
-        showToast(d.error || 'Gagal', false);
-      }
-    })
-    .catch(function(e){ showToast('Connection error', false); });
-  };
-
-  // ─ stats ───────────────────────────────────────────────────────────────────
-  window.loadStats = loadStats;
-  function loadStats() {
-    hideErr('statsErr');
-    document.getElementById('weekChart').innerHTML = '<p style="color:#64748b;font-size:13px">Memuat…</p>';
-    fetch('/api/user/donations/stats?password=' + encodeURIComponent(CFG.pwd))
-      .then(function(r) {
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        return r.json();
-      })
-      .then(function(d) {
-        if (!d.success) throw new Error(d.error || 'Unauthorized');
-        statsLoaded = true;
-        document.getElementById('sTotalAmount').textContent  = fmt(d.totals.total_amount || 0);
-        document.getElementById('sTotalCount').textContent   = Number(d.totals.total_donations || 0).toLocaleString();
-        document.getElementById('sUniqueDonors').textContent = Number(d.totals.unique_donors || 0).toLocaleString();
-        var days = d.recent7 || [];
-        if (!days.length) {
-          document.getElementById('weekChart').innerHTML = '<p style="color:#64748b;font-size:13px">Belum ada data minggu ini</p>';
-          return;
-        }
-        var max = Math.max.apply(null, days.map(function(x){ return parseInt(x.amount)||0; }).concat([1]));
-        document.getElementById('weekChart').innerHTML = days.map(function(day) {
-          var pct   = Math.max(4, Math.round((parseInt(day.amount)||0) / max * 100));
-          var label = new Date(day.day).toLocaleDateString('id-ID',{weekday:'short',day:'numeric'});
-          return '<div class="bar-wrap"><div class="bar" style="height:'+pct+'%" title="'+fmt(day.amount)+'"></div><div class="bar-label">'+label+'</div></div>';
-        }).join('');
-      })
-      .catch(function(e) {
-        showErr('statsErr', 'statsErrMsg', e.message);
-      });
-  };
-
-  // ─ donations ───────────────────────────────────────────────────────────────
-  window.loadDonations = loadDonations;
-  function loadDonations(offset) {
-    if (offset === undefined) offset = 0;
-    donPage = offset;
-    hideErr('donErr');
-    var search = document.getElementById('searchInput').value.trim();
-    var tbody  = document.getElementById('donTbody');
-    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px;color:#64748b">Memuat…</td></tr>';
-    var url = '/api/user/donations?password=' + encodeURIComponent(CFG.pwd)
-            + '&limit=' + donLimit + '&offset=' + offset
-            + '&search=' + encodeURIComponent(search);
-    fetch(url)
-      .then(function(r) {
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        return r.json();
-      })
-      .then(function(d) {
-        if (!d.success) throw new Error(d.error || 'Gagal memuat donasi');
-        donTotal = d.total;
-        if (!d.donations.length) {
-          tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:30px;color:#64748b">Belum ada donasi</td></tr>';
-          renderPagination();
-          return;
-        }
-        tbody.innerHTML = d.donations.map(function(don, i) {
-          var msg = (don.message || '').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-          return '<tr>'
-            + '<td style="color:#64748b">'+(offset+i+1)+'</td>'
-            + '<td style="white-space:nowrap">'+fmtDate(don.donated_at)+'</td>'
-            + '<td><strong style="color:#10b981">'+(don.username||'')+'</strong></td>'
-            + '<td style="color:#94a3b8">'+(don.display_name||'—')+'</td>'
-            + '<td>'+sourceBadge(don.source||'?')+'</td>'
-            + '<td><strong>'+fmt(don.amount)+'</strong></td>'
-            + '<td style="color:#94a3b8;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+msg+'">'+(don.message||'—')+'</td>'
-            + '</tr>';
-        }).join('');
-        renderPagination();
-      })
-      .catch(function(e) {
-        tbody.innerHTML = '';
-        showErr('donErr', 'donErrMsg', e.message);
-      });
-  };
-  window.debounceSearch = debounceSearch;
-  function debounceSearch() {
-    clearTimeout(searchTimer);
-    searchTimer = setTimeout(function(){ loadDonations(0); }, 400);
-  };
-  function renderPagination() {
-    var pages = Math.ceil(donTotal / donLimit);
-    var cur   = Math.floor(donPage / donLimit);
-    var el    = document.getElementById('pagination');
-    if (pages <= 1) { el.innerHTML = ''; return; }
-    el.innerHTML = ''
-      + '<button class="btn btn-sm btn-sec" '+(cur===0?'disabled':'')+' onclick="loadDonations('+(cur-1)*donLimit+')">‹ Prev</button>'
-      + '<span>'+( cur+1)+' / '+pages+' (Total: '+donTotal.toLocaleString()+')</span>'
-      + '<button class="btn btn-sm btn-sec" '+(cur>=pages-1?'disabled':'')+' onclick="loadDonations('+(cur+1)*donLimit+')">Next ›</button>';
-  }
-
-  // ─ leaderboard ─────────────────────────────────────────────────────────────
-  window.loadLeaderboard = loadLeaderboard;
-  function loadLeaderboard() {
-    hideErr('lbErr');
-    var tbody = document.getElementById('lbTbody');
-    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:#64748b">Memuat…</td></tr>';
-    fetch('/api/user/donations/stats?password=' + encodeURIComponent(CFG.pwd))
-      .then(function(r) {
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        return r.json();
-      })
-      .then(function(d) {
-        if (!d.success) throw new Error(d.error || 'Unauthorized');
-        lbLoaded = true;
-        if (!d.byUser || !d.byUser.length) {
-          tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:30px;color:#64748b">Belum ada data</td></tr>';
-          return;
-        }
-        var medals = ['🥇','🥈','🥉'];
-        tbody.innerHTML = d.byUser.map(function(u, i) {
-          return '<tr>'
-            + '<td><strong style="font-size:18px">'+(medals[i]||('#'+(i+1)))+'</strong></td>'
-            + '<td><strong style="color:#10b981">'+u.username+'</strong></td>'
-            + '<td style="color:#94a3b8">'+(u.display_name||'—')+'</td>'
-            + '<td><span class="badge bp">'+u.donation_count+'×</span></td>'
-            + '<td><strong style="color:#f59e0b">'+fmt(u.total_amount)+'</strong></td>'
-            + '<td style="color:#64748b;font-size:12px">'+fmtDate(u.last_donation)+'</td>'
-            + '</tr>';
-        }).join('');
-      })
-      .catch(function(e) {
-        tbody.innerHTML = '';
-        showErr('lbErr', 'lbErrMsg', e.message);
-      });
-  };
-
-  // ─ export CSV ──────────────────────────────────────────────────────────────
-  window.exportCSV = exportCSV;
-  function exportCSV() {
-    showToast('Mengambil data…', true);
-    fetch('/api/user/donations?password=' + encodeURIComponent(CFG.pwd) + '&limit=5000&offset=0')
-      .then(function(r){ return r.json(); })
-      .then(function(d) {
-        if (!d.success) { showToast('Gagal export', false); return; }
-        var header = 'No,Waktu,Username,Nama,Platform,Jumlah,Pesan';
-        var rows = d.donations.map(function(x, i) {
-          return [i+1, new Date(x.donated_at).toISOString(), x.username, x.display_name, x.source, x.amount, (x.message||'').replace(/,/g,' ')].join(',');
-        });
-        var csv  = [header].concat(rows).join('\n');
-        var blob = new Blob([csv],{type:'text/csv'});
-        var a    = document.createElement('a');
-        a.href     = URL.createObjectURL(blob);
-        a.download = 'donasi_' + Date.now() + '.csv';
-        a.click();
-        showToast('Export berhasil!', true);
-      })
-      .catch(function(){ showToast('Gagal export', false); });
-  };
-
-  // init
-  loadStats();
-})();
+}
+function loadDonations(offset){
+  if(offset===undefined)offset=0;
+  _donPage=offset;
+  var search=document.getElementById('searchInput').value.trim();
+  var tbody=document.getElementById('donTbody');
+  tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:24px;color:#64748b">Memuat...</td></tr>';
+  fetch('/api/user/donations?password='+encodeURIComponent(_PWD)+'&limit='+_donLimit+'&offset='+offset+'&search='+encodeURIComponent(search))
+  .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();})
+  .then(function(d){
+    if(!d.success){tbody.innerHTML='<tr><td colspan="7" style="text-align:center;color:#ef4444">'+d.error+'</td></tr>';return;}
+    _donTotal=d.total;
+    if(!d.donations.length){tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:30px;color:#64748b">Belum ada donasi</td></tr>';renderPagination();return;}
+    tbody.innerHTML=d.donations.map(function(don,i){
+      return '<tr><td style="color:#64748b">'+(offset+i+1)+'</td><td style="white-space:nowrap">'+fmtDate(don.donated_at)+'</td><td><strong style="color:#10b981">'+(don.username||'')+'</strong></td><td style="color:#94a3b8">'+(don.display_name||'&mdash;')+'</td><td>'+sourceBadge(don.source||'?')+'</td><td><strong>'+fmt(don.amount)+'</strong></td><td style="color:#94a3b8;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(don.message||'&mdash;')+'</td></tr>';
+    }).join('');
+    renderPagination();
+  }).catch(function(e){tbody.innerHTML='<tr><td colspan="7" style="text-align:center;color:#ef4444">Error: '+e.message+'</td></tr>';});
+}
+function renderPagination(){
+  var pages=Math.ceil(_donTotal/_donLimit),cur=Math.floor(_donPage/_donLimit);
+  var el=document.getElementById('pagination');
+  if(pages<=1){el.innerHTML='';return;}
+  el.innerHTML='<button class="btn btn-sm btn-sec"'+(cur===0?' disabled':'')+' onclick="loadDonations('+(cur-1)*_donLimit+')">Prev</button><span>'+(cur+1)+'/'+pages+' ('+_donTotal+')</span><button class="btn btn-sm btn-sec"'+(cur>=pages-1?' disabled':'')+' onclick="loadDonations('+(cur+1)*_donLimit+')">Next</button>';
+}
+function loadLeaderboard(){
+  var tbody=document.getElementById('lbTbody');
+  tbody.innerHTML='<tr><td colspan="6" style="text-align:center;padding:24px;color:#64748b">Memuat...</td></tr>';
+  fetch('/api/user/donations/stats?password='+encodeURIComponent(_PWD))
+  .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();})
+  .then(function(d){
+    if(!d.success){tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:#ef4444">'+d.error+'</td></tr>';return;}
+    if(!d.byUser||!d.byUser.length){tbody.innerHTML='<tr><td colspan="6" style="text-align:center;padding:30px;color:#64748b">Belum ada data</td></tr>';return;}
+    var medals=['🥇','🥈','🥉'];
+    tbody.innerHTML=d.byUser.map(function(u,i){
+      return '<tr><td><strong style="font-size:18px">'+(medals[i]||'#'+(i+1))+'</strong></td><td><strong style="color:#10b981">'+u.username+'</strong></td><td style="color:#94a3b8">'+(u.display_name||'&mdash;')+'</td><td><span class="badge bp">'+u.donation_count+'x</span></td><td><strong style="color:#f59e0b">'+fmt(u.total_amount)+'</strong></td><td style="color:#64748b;font-size:12px">'+fmtDate(u.last_donation)+'</td></tr>';
+    }).join('');
+  }).catch(function(e){tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:#ef4444">Error: '+e.message+'</td></tr>';});
+}
+function exportCSV(){
+  showToast('Mengambil data...',true);
+  fetch('/api/user/donations?password='+encodeURIComponent(_PWD)+'&limit=5000&offset=0')
+  .then(function(r){return r.json();}).then(function(d){
+    if(!d.success){showToast('Gagal export',false);return;}
+    var rows=d.donations.map(function(x,i){return [i+1,new Date(x.donated_at).toISOString(),x.username,x.display_name,x.source,x.amount,(x.message||'').replace(/,/g,' ')].join(',');});
+    var a=document.createElement('a');
+    a.href=URL.createObjectURL(new Blob([['No,Waktu,Username,Nama,Platform,Jumlah,Pesan'].concat(rows).join('\n')],{type:'text/csv'}));
+    a.download='donasi_'+Date.now()+'.csv';a.click();
+    showToast('Export berhasil!',true);
+  }).catch(function(){showToast('Gagal export',false);});
+}
+loadStats();
 </script>
 </body></html>`);
 });
