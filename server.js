@@ -559,13 +559,88 @@ app.get('/api/debug/auth', async (req, res) => {
 });
 
 app.get('/', (_req, res) => {
-    res.send(fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8').replace('</body>', '') || `<!DOCTYPE html><html><body><h1>Archie Webhook</h1></body></html>`);
-});
-
-app.get('/admin/dashboard', (req, res) => {
-    const token = req.query.token;
-    if (!token || !adminFromToken(token)) return res.redirect('/');
-    res.type('html').send(fs.readFileSync(path.join(__dirname, 'admin.html'), 'utf8').replace('TOKEN_PLACEHOLDER', token));
+    res.send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Archie Webhook Integration</title>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:'Segoe UI',system-ui,sans-serif;background:#0a0e27;min-height:100vh;display:flex;justify-content:center;align-items:center;overflow:hidden;position:relative}
+    body::before{content:'';position:absolute;width:200%;height:200%;background:radial-gradient(circle at 20% 50%,rgba(120,119,198,.3),transparent 50%),radial-gradient(circle at 80% 80%,rgba(88,166,255,.3),transparent 50%),radial-gradient(circle at 40% 20%,rgba(139,92,246,.2),transparent 50%);animation:float 20s ease-in-out infinite}
+    @keyframes float{0%,100%{transform:translate(0,0) rotate(0)}33%{transform:translate(30px,-50px) rotate(120deg)}66%{transform:translate(-20px,20px) rotate(240deg)}}
+    .grid-bg{position:absolute;width:100%;height:100%;background-image:linear-gradient(rgba(139,92,246,.1) 1px,transparent 1px),linear-gradient(90deg,rgba(139,92,246,.1) 1px,transparent 1px);background-size:50px 50px;opacity:.3}
+    .container{position:relative;z-index:10;width:90%;max-width:450px}
+    .box{background:rgba(15,23,42,.8);backdrop-filter:blur(20px);border:1px solid rgba(139,92,246,.3);border-radius:24px;padding:48px 40px;box-shadow:0 20px 60px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.1);animation:fadeIn .6s ease-out}
+    @keyframes fadeIn{from{opacity:0;transform:translateY(30px)}to{opacity:1;transform:translateY(0)}}
+    .logo{text-align:center;margin-bottom:40px}
+    .logo-icon{width:80px;height:80px;background:linear-gradient(135deg,#8b5cf6,#3b82f6);border-radius:20px;display:inline-flex;align-items:center;justify-content:center;font-size:40px;margin-bottom:16px;box-shadow:0 10px 30px rgba(139,92,246,.4);animation:pulse 2s ease-in-out infinite}
+    @keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.05)}}
+    h1{color:#fff;font-size:28px;font-weight:700;margin-bottom:8px}
+    .sub{color:#94a3b8;font-size:14px}
+    .tabs{display:flex;gap:12px;margin-bottom:32px}
+    .tab{flex:1;padding:12px;background:rgba(15,23,42,.5);border:1px solid rgba(139,92,246,.2);border-radius:12px;color:#94a3b8;font-size:14px;font-weight:600;cursor:pointer;transition:all .3s;text-align:center}
+    .tab.active{background:rgba(139,92,246,.2);border-color:#8b5cf6;color:#8b5cf6}
+    .tc{display:none}.tc.active{display:block}
+    .fg{margin-bottom:24px}
+    label{display:block;color:#cbd5e1;font-size:14px;font-weight:500;margin-bottom:8px}
+    .iw{position:relative}
+    input{width:100%;padding:16px 48px 16px 16px;background:rgba(15,23,42,.6);border:2px solid rgba(139,92,246,.2);border-radius:12px;color:#fff;font-size:15px;transition:all .3s;outline:none}
+    input:focus{border-color:#8b5cf6;background:rgba(15,23,42,.9);box-shadow:0 0 0 4px rgba(139,92,246,.1)}
+    .ii{position:absolute;right:16px;top:50%;transform:translateY(-50%);color:#64748b;font-size:20px}
+    button{width:100%;padding:16px;background:linear-gradient(135deg,#8b5cf6,#3b82f6);border:none;border-radius:12px;color:#fff;font-size:16px;font-weight:600;cursor:pointer;transition:all .3s;box-shadow:0 8px 24px rgba(139,92,246,.4)}
+    button:hover{transform:translateY(-2px);box-shadow:0 12px 32px rgba(139,92,246,.5)}
+    .err{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:#fca5a5;padding:12px 16px;border-radius:8px;font-size:14px;margin-top:16px;display:none}
+    .footer{text-align:center;margin-top:32px;padding-top:24px;border-top:1px solid rgba(139,92,246,.1)}
+    .ft{color:#64748b;font-size:13px;margin-bottom:12px}
+    .dl{display:inline-flex;align-items:center;gap:8px;color:#8b5cf6;text-decoration:none;font-size:14px;font-weight:500;padding:8px 16px;border-radius:8px;background:rgba(139,92,246,.1);border:1px solid rgba(139,92,246,.2);transition:all .3s}
+    .dl:hover{background:rgba(139,92,246,.2);transform:translateY(-2px)}
+  </style>
+</head>
+<body>
+  <div class="grid-bg"></div>
+  <div class="container"><div class="box">
+    <div class="logo">
+      <div class="logo-icon">🎮</div>
+      <h1>Archie Webhook</h1>
+      <p class="sub">Secure Integration Portal</p>
+    </div>
+    <div class="tabs">
+      <div class="tab active" onclick="sw('user')">👤 User Login</div>
+      <div class="tab" onclick="sw('admin')">🔐 Admin Login</div>
+    </div>
+    <div id="uT" class="tc active">
+      <form id="uF">
+        <div class="fg"><label>Access Password</label>
+          <div class="iw"><input type="password" id="uP" placeholder="Enter your password" required><span class="ii">🔐</span></div>
+        </div>
+        <button type="submit">Access Dashboard</button>
+        <div class="err" id="uE">Invalid password. Please try again.</div>
+      </form>
+    </div>
+    <div id="aT" class="tc">
+      <form id="aF">
+        <div class="fg"><label>Username</label>
+          <div class="iw"><input type="text" id="aU" placeholder="Admin username" required><span class="ii">👤</span></div>
+        </div>
+        <div class="fg"><label>Password</label>
+          <div class="iw"><input type="password" id="aP" placeholder="Admin password" required><span class="ii">🔐</span></div>
+        </div>
+        <button type="submit">Admin Access</button>
+        <div class="err" id="aE">Invalid credentials.</div>
+      </form>
+    </div>
+    <div class="footer">
+      <p class="ft">Need assistance?</p>
+      <a href="https://discord.com/users/wispray" target="_blank" class="dl">💬 Contact on Discord</a>
+    </div>
+  </div></div>
+  <script>
+    function sw(t){document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.tc').forEach(x=>x.classList.remove('active'));if(t==='user'){document.querySelectorAll('.tab')[0].classList.add('active');document.getElementById('uT').classList.add('active')}else{document.querySelectorAll('.tab')[1].classList.add('active');document.getElementById('aT').classList.add('active')}}
+    document.getElementById('uF').addEventListener('submit',async e=>{e.preventDefault();const p=document.getElementById('uP').value.trim();if(!p)return;try{const r=await fetch('/api/auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:p})});const d=await r.json();if(d.success)window.location.href='/dashboard?password='+encodeURIComponent(p);else{document.getElementById('uE').style.display='block';document.getElementById('uP').value='';}}catch(e){document.getElementById('uE').textContent='Connection error.';document.getElementById('uE').style.display='block';}});
+    document.getElementById('aF').addEventListener('submit',async e=>{e.preventDefault();const u=document.getElementById('aU').value.trim();const p=document.getElementById('aP').value.trim();if(!u||!p)return;try{const r=await fetch('/api/admin/auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p})});const d=await r.json();if(d.success)window.location.href='/admin/dashboard?token='+encodeURIComponent(d.token);else{document.getElementById('aE').style.display='block';document.getElementById('aP').value='';}}catch(e){document.getElementById('aE').textContent='Connection error.';document.getElementById('aE').style.display='block';}});
+  </script>
+</body></html>`);
 });
 
 app.use((_req, res) => res.status(404).json({ error: 'Not found' }));
