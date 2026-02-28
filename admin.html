@@ -1,0 +1,937 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Admin Dashboard</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Syne:wght@400;600;700;800&display=swap');
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#060a18;--surface:rgba(10,16,35,.9);--border:rgba(99,102,241,.2);
+  --accent:#6366f1;--accent2:#22d3ee;--accent3:#f472b6;
+  --text:#e2e8f0;--muted:#64748b;--danger:#f43f5e;--success:#34d399;--warn:#fbbf24;
+}
+body{font-family:'Syne',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
+body::before{content:'';position:fixed;inset:0;background:
+  radial-gradient(ellipse 80% 50% at 20% 0%,rgba(99,102,241,.12),transparent),
+  radial-gradient(ellipse 60% 40% at 80% 100%,rgba(34,211,238,.08),transparent),
+  radial-gradient(ellipse 50% 60% at 50% 50%,rgba(244,114,182,.05),transparent);
+  pointer-events:none;z-index:0}
+
+/* ── Layout ── */
+.layout{display:flex;min-height:100vh;position:relative;z-index:1}
+.sidebar{width:240px;flex-shrink:0;background:rgba(6,10,24,.95);border-right:1px solid var(--border);display:flex;flex-direction:column;position:sticky;top:0;height:100vh}
+.main{flex:1;overflow:auto;padding:0}
+
+/* ── Sidebar ── */
+.sb-brand{padding:28px 24px 20px;border-bottom:1px solid var(--border)}
+.sb-brand .logo{display:flex;align-items:center;gap:10px;margin-bottom:4px}
+.sb-brand .icon{width:36px;height:36px;background:linear-gradient(135deg,var(--accent),var(--accent2));border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+.sb-brand h2{font-size:16px;font-weight:800;letter-spacing:-.3px;color:#fff}
+.sb-brand p{font-size:11px;color:var(--muted);font-family:'JetBrains Mono',monospace;margin-left:46px}
+.sb-nav{flex:1;padding:16px 12px;overflow-y:auto}
+.nav-section{margin-bottom:20px}
+.nav-label{font-size:10px;font-weight:700;letter-spacing:1.5px;color:var(--muted);text-transform:uppercase;padding:0 12px;margin-bottom:6px}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;cursor:pointer;color:var(--muted);font-size:14px;font-weight:600;transition:all .2s;position:relative;border:none;background:none;width:100%;text-align:left}
+.nav-item:hover{background:rgba(99,102,241,.1);color:var(--text)}
+.nav-item.active{background:rgba(99,102,241,.15);color:var(--accent)}
+.nav-item.active::before{content:'';position:absolute;left:0;top:50%;transform:translateY(-50%);width:3px;height:60%;background:var(--accent);border-radius:0 2px 2px 0}
+.nav-item .ni{font-size:16px;width:20px;text-align:center}
+.sb-footer{padding:16px 12px;border-top:1px solid var(--border)}
+.admin-info{display:flex;align-items:center;gap:10px;padding:10px 12px;background:rgba(99,102,241,.08);border-radius:10px;margin-bottom:10px}
+.admin-avatar{width:32px;height:32px;background:linear-gradient(135deg,var(--accent),var(--accent3));border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
+.admin-name{font-size:13px;font-weight:700;color:#fff}
+.admin-role{font-size:10px;color:var(--muted);font-family:'JetBrains Mono',monospace}
+.logout-btn{width:100%;padding:9px;background:rgba(244,63,94,.1);border:1px solid rgba(244,63,94,.2);border-radius:8px;color:var(--danger);font-size:13px;font-weight:700;cursor:pointer;transition:all .2s;font-family:'Syne',sans-serif}
+.logout-btn:hover{background:rgba(244,63,94,.2)}
+
+/* ── Top Bar ── */
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:20px 32px;border-bottom:1px solid var(--border);background:rgba(6,10,24,.8);backdrop-filter:blur(12px);position:sticky;top:0;z-index:100}
+.page-title h1{font-size:22px;font-weight:800;color:#fff;letter-spacing:-.5px}
+.page-title p{font-size:12px;color:var(--muted);margin-top:2px;font-family:'JetBrains Mono',monospace}
+.topbar-actions{display:flex;gap:10px;align-items:center}
+
+/* ── Content ── */
+.content{padding:28px 32px}
+
+/* ── Pages ── */
+.page{display:none}.page.active{display:block}
+
+/* ── Stats Grid ── */
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:28px}
+.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:20px 22px;position:relative;overflow:hidden;transition:border-color .2s}
+.stat-card:hover{border-color:rgba(99,102,241,.4)}
+.stat-card::after{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(99,102,241,.04),transparent);pointer-events:none}
+.stat-icon{font-size:24px;margin-bottom:12px}
+.stat-val{font-size:28px;font-weight:800;color:#fff;letter-spacing:-1px;margin-bottom:4px}
+.stat-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;font-weight:600}
+.stat-card.c1{border-top:2px solid var(--accent)}
+.stat-card.c2{border-top:2px solid var(--accent2)}
+.stat-card.c3{border-top:2px solid var(--accent3)}
+.stat-card.c4{border-top:2px solid var(--warn)}
+
+/* ── Cards ── */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:24px;margin-bottom:20px}
+.card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px}
+.card-title{font-size:16px;font-weight:700;color:#fff;display:flex;align-items:center;gap:8px}
+.card-title span{font-size:18px}
+
+/* ── Table ── */
+.tbl-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13px}
+thead{background:rgba(99,102,241,.08)}
+th{padding:12px 14px;text-align:left;color:var(--accent);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;white-space:nowrap}
+td{padding:12px 14px;color:#94a3b8;border-bottom:1px solid rgba(99,102,241,.06)}
+tr:last-child td{border:none}
+tr:hover td{background:rgba(99,102,241,.03)}
+.td-name{color:#fff;font-weight:700}
+.td-id{color:var(--muted);font-family:'JetBrains Mono',monospace;font-size:11px}
+.td-money{color:var(--success);font-weight:700;font-family:'JetBrains Mono',monospace}
+
+/* ── Badges ── */
+.badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:.3px}
+.b-green{background:rgba(52,211,153,.1);color:var(--success);border:1px solid rgba(52,211,153,.2)}
+.b-yellow{background:rgba(251,191,36,.1);color:var(--warn);border:1px solid rgba(251,191,36,.2)}
+.b-red{background:rgba(244,63,94,.1);color:var(--danger);border:1px solid rgba(244,63,94,.2)}
+.b-blue{background:rgba(99,102,241,.1);color:var(--accent);border:1px solid rgba(99,102,241,.2)}
+.b-cyan{background:rgba(34,211,238,.1);color:var(--accent2);border:1px solid rgba(34,211,238,.2)}
+.b-pink{background:rgba(244,114,182,.1);color:var(--accent3);border:1px solid rgba(244,114,182,.2)}
+
+/* ── Buttons ── */
+.btn{display:inline-flex;align-items:center;gap:6px;padding:9px 18px;border:none;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;transition:all .2s;font-family:'Syne',sans-serif}
+.btn-primary{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;box-shadow:0 4px 12px rgba(99,102,241,.3)}
+.btn-primary:hover{transform:translateY(-1px);box-shadow:0 6px 18px rgba(99,102,241,.4)}
+.btn-ghost{background:rgba(99,102,241,.1);border:1px solid var(--border);color:var(--text)}
+.btn-ghost:hover{background:rgba(99,102,241,.2);border-color:rgba(99,102,241,.4)}
+.btn-danger{background:rgba(244,63,94,.15);border:1px solid rgba(244,63,94,.3);color:var(--danger)}
+.btn-danger:hover{background:rgba(244,63,94,.25)}
+.btn-warn{background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.3);color:var(--warn)}
+.btn-warn:hover{background:rgba(251,191,36,.22)}
+.btn-sm{padding:6px 12px;font-size:12px;border-radius:7px}
+.btn-xs{padding:4px 9px;font-size:11px;border-radius:6px}
+.btn-group{display:flex;gap:6px;flex-wrap:wrap}
+
+/* ── Search bar ── */
+.sbar{display:flex;gap:10px;margin-bottom:18px;flex-wrap:wrap}
+.sbar input,.sbar select{padding:10px 14px;background:rgba(10,16,35,.8);border:1.5px solid var(--border);border-radius:9px;color:var(--text);font-size:13px;outline:none;font-family:'Syne',sans-serif}
+.sbar input{flex:1;min-width:160px}
+.sbar input:focus,.sbar select:focus{border-color:var(--accent)}
+.sbar select option{background:#0a1023;color:var(--text)}
+
+/* ── Modal ── */
+.modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:1000;justify-content:center;align-items:center;padding:20px;backdrop-filter:blur(4px)}
+.modal.active{display:flex}
+.mc{background:rgba(10,16,35,.98);border:1px solid rgba(99,102,241,.3);border-radius:20px;padding:32px;width:100%;max-width:520px;max-height:90vh;overflow-y:auto}
+.mc.wide{max-width:680px}
+.mh{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px}
+.mh h2{font-size:20px;font-weight:800;color:#fff}
+.xbtn{background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer;line-height:1;transition:color .2s}
+.xbtn:hover{color:#fff}
+.fg{margin-bottom:18px}
+.fg label{display:block;color:#cbd5e1;font-size:13px;font-weight:600;margin-bottom:7px}
+.fg label small{color:var(--muted);font-weight:400;margin-left:4px}
+.fg input,.fg select,.fg textarea{width:100%;padding:11px 14px;background:rgba(6,10,24,.8);border:2px solid rgba(99,102,241,.2);border-radius:9px;color:#fff;font-size:14px;outline:none;font-family:'Syne',sans-serif;transition:border-color .2s}
+.fg input:focus,.fg select:focus,.fg textarea:focus{border-color:var(--accent)}
+.fg select option{background:#0a1023}
+.fg textarea{resize:vertical;min-height:80px}
+.fg-row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.mf{display:flex;gap:10px;justify-content:flex-end;margin-top:24px}
+
+/* ── Pagination ── */
+.pag{display:flex;justify-content:center;align-items:center;gap:8px;margin-top:16px;font-size:13px;color:var(--muted)}
+
+/* ── Toast ── */
+.toast{position:fixed;top:20px;right:20px;padding:14px 20px;border-radius:12px;font-weight:700;font-size:14px;z-index:9999;display:none;max-width:340px;animation:slideIn .3s ease}
+@keyframes slideIn{from{transform:translateX(100%);opacity:0}to{transform:translateX(0);opacity:1}}
+.t-ok{background:rgba(52,211,153,.15);border:1px solid rgba(52,211,153,.3);color:var(--success)}
+.t-err{background:rgba(244,63,94,.15);border:1px solid rgba(244,63,94,.3);color:var(--danger)}
+.t-info{background:rgba(99,102,241,.15);border:1px solid rgba(99,102,241,.3);color:var(--accent)}
+
+/* ── Webhook box ── */
+.wh-box{background:rgba(6,10,24,.8);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin:8px 0}
+.wh-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.wh-url{color:var(--success);font-family:'JetBrains Mono',monospace;font-size:12px;word-break:break-all}
+
+/* ── Donation mini table ── */
+.mini-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px}
+.mini-stat{background:rgba(6,10,24,.8);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center}
+.mini-stat .v{font-size:20px;font-weight:800;color:#fff;font-family:'JetBrains Mono',monospace}
+.mini-stat .l{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-top:4px}
+
+/* ── Empty state ── */
+.empty{text-align:center;padding:48px 24px;color:var(--muted)}
+.empty .ei{font-size:48px;margin-bottom:12px}
+.empty p{font-size:14px}
+
+/* ── Loading ── */
+.loading{text-align:center;padding:32px;color:var(--muted);font-size:13px}
+.spinner{display:inline-block;width:20px;height:20px;border:2px solid rgba(99,102,241,.3);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;margin-right:8px;vertical-align:middle}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── Confirm dialog ── */
+.confirm-modal .mc{max-width:380px;text-align:center}
+.confirm-modal .ci{font-size:48px;margin-bottom:12px}
+.confirm-modal h3{font-size:18px;font-weight:800;color:#fff;margin-bottom:8px}
+.confirm-modal p{color:var(--muted);font-size:14px;margin-bottom:24px}
+
+/* ── Responsive ── */
+@media(max-width:768px){
+  .sidebar{display:none}
+  .content{padding:16px}
+  .topbar{padding:14px 16px}
+  .fg-row{grid-template-columns:1fr}
+  .stats-grid{grid-template-columns:repeat(2,1fr)}
+  .mini-stats{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+
+<!-- Toasts -->
+<div class="toast t-ok" id="tOk"></div>
+<div class="toast t-err" id="tErr"></div>
+<div class="toast t-info" id="tInfo"></div>
+
+<!-- ══════════════ MODALS ══════════════ -->
+
+<!-- Add/Edit Game Modal -->
+<div class="modal" id="gameModal">
+  <div class="mc wide">
+    <div class="mh">
+      <h2 id="gmTitle">➕ Tambah Game</h2>
+      <button class="xbtn" onclick="closeModal('gameModal')">✕</button>
+    </div>
+    <div class="fg-row">
+      <div class="fg"><label>Nama Game</label><input id="gmName" placeholder="My Awesome Game"></div>
+      <div class="fg"><label>Universe ID</label><input id="gmUid" placeholder="1234567890" type="text"></div>
+    </div>
+    <div class="fg"><label>API Key <small>(Roblox Open Cloud)</small></label><input id="gmApiKey" placeholder="roblox-api-key..."></div>
+    <div class="fg-row">
+      <div class="fg"><label>Topic <small>(default: ArchieDonationIDR)</small></label><input id="gmTopic" placeholder="ArchieDonationIDR"></div>
+      <div class="fg"><label>Webhook Secret <small>(auto jika kosong)</small></label><input id="gmSecret" placeholder="(auto-generate)"></div>
+    </div>
+    <div class="fg-row">
+      <div class="fg"><label>Saweria Token <small>(opsional)</small></label><input id="gmSawToken" placeholder=""></div>
+      <div class="fg"><label>SocialBuzz Token <small>(opsional)</small></label><input id="gmSbToken" placeholder=""></div>
+    </div>
+    <div class="fg" id="gmPwdWrap">
+      <label>Password Dashboard</label>
+      <input id="gmPwd" type="password" placeholder="Min. 6 karakter">
+    </div>
+    <div class="mf">
+      <button class="btn btn-ghost" onclick="closeModal('gameModal')">Batal</button>
+      <button class="btn btn-primary" id="gmSave" onclick="saveGame()">💾 Simpan</button>
+    </div>
+  </div>
+</div>
+
+<!-- Reset Password Modal -->
+<div class="modal" id="resetModal">
+  <div class="mc">
+    <div class="mh">
+      <h2>🔑 Reset Password</h2>
+      <button class="xbtn" onclick="closeModal('resetModal')">✕</button>
+    </div>
+    <p style="color:var(--muted);font-size:14px;margin-bottom:20px">Game: <strong id="resetGameName" style="color:#fff"></strong></p>
+    <div class="fg"><label>Password Baru</label><input id="resetPwd" type="password" placeholder="Min. 6 karakter"></div>
+    <div class="fg"><label>Konfirmasi</label><input id="resetPwd2" type="password" placeholder="Ulangi password"></div>
+    <div class="mf">
+      <button class="btn btn-ghost" onclick="closeModal('resetModal')">Batal</button>
+      <button class="btn btn-primary" onclick="doResetPassword()">✅ Reset</button>
+    </div>
+  </div>
+</div>
+
+<!-- Donations Modal -->
+<div class="modal" id="donModal">
+  <div class="mc wide">
+    <div class="mh">
+      <h2>📜 Donasi — <span id="donModalName"></span></h2>
+      <button class="xbtn" onclick="closeModal('donModal')">✕</button>
+    </div>
+    <div class="mini-stats">
+      <div class="mini-stat"><div class="v" id="dmTotal">-</div><div class="l">Total</div></div>
+      <div class="mini-stat"><div class="v" id="dmCount">-</div><div class="l">Transaksi</div></div>
+      <div class="mini-stat"><div class="v" id="dmDonors">-</div><div class="l">Donatur</div></div>
+    </div>
+    <div class="sbar">
+      <input type="text" id="donSearch" placeholder="Cari username..." oninput="debounceSearch()">
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>#</th><th>Waktu</th><th>Username</th><th>Platform</th><th>Jumlah</th><th>Pesan</th></tr></thead>
+        <tbody id="donTbody"><tr><td colspan="6" class="loading"><span class="spinner"></span>Memuat...</td></tr></tbody>
+      </table>
+    </div>
+    <div class="pag" id="donPag"></div>
+  </div>
+</div>
+
+<!-- Webhook URLs Modal -->
+<div class="modal" id="urlModal">
+  <div class="mc">
+    <div class="mh">
+      <h2>🔗 Webhook URLs — <span id="urlModalName"></span></h2>
+      <button class="xbtn" onclick="closeModal('urlModal')">✕</button>
+    </div>
+    <div id="urlContent"></div>
+    <div class="mf"><button class="btn btn-ghost" onclick="closeModal('urlModal')">Tutup</button></div>
+  </div>
+</div>
+
+<!-- Confirm Delete Modal -->
+<div class="modal confirm-modal" id="delModal">
+  <div class="mc">
+    <div class="ci">🗑️</div>
+    <h3>Hapus Game?</h3>
+    <p id="delMsg">Tindakan ini tidak dapat dibatalkan dan akan menghapus semua data donasi.</p>
+    <div class="mf" style="justify-content:center">
+      <button class="btn btn-ghost" onclick="closeModal('delModal')">Batal</button>
+      <button class="btn btn-danger" id="delConfirm">Ya, Hapus</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ LAYOUT ══════════════ -->
+<div class="layout">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sb-brand">
+      <div class="logo">
+        <div class="icon">🎮</div>
+        <h2>Archie Admin</h2>
+      </div>
+      <p>v3.0.0 · Control Panel</p>
+    </div>
+    <nav class="sb-nav">
+      <div class="nav-section">
+        <div class="nav-label">Overview</div>
+        <button class="nav-item active" onclick="navTo('overview')"><span class="ni">📊</span> Dashboard</button>
+        <button class="nav-item" onclick="navTo('games')"><span class="ni">🎮</span> Kelola Game</button>
+        <button class="nav-item" onclick="navTo('donations')"><span class="ni">💰</span> Semua Donasi</button>
+      </div>
+      <div class="nav-section">
+        <div class="nav-label">Sistem</div>
+        <button class="nav-item" onclick="navTo('admin-settings')"><span class="ni">⚙️</span> Admin Settings</button>
+      </div>
+    </nav>
+    <div class="sb-footer">
+      <div class="admin-info">
+        <div class="admin-avatar">👑</div>
+        <div>
+          <div class="admin-name" id="sbAdminName">Administrator</div>
+          <div class="admin-role">SUPER ADMIN</div>
+        </div>
+      </div>
+      <button class="logout-btn" onclick="doLogout()">🚪 Logout</button>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <div class="main">
+    <div class="topbar">
+      <div class="page-title">
+        <h1 id="pageHeading">Dashboard</h1>
+        <p id="pageSubtitle">Overview sistem</p>
+      </div>
+      <div class="topbar-actions">
+        <button class="btn btn-ghost btn-sm" onclick="refreshCurrent()">🔄 Refresh</button>
+        <button class="btn btn-primary btn-sm" id="topAddBtn" onclick="openAddGame()" style="display:none">➕ Tambah Game</button>
+      </div>
+    </div>
+
+    <div class="content">
+
+      <!-- ── Overview Page ── -->
+      <div class="page active" id="p-overview">
+        <div class="stats-grid">
+          <div class="stat-card c1"><div class="stat-icon">🎮</div><div class="stat-val" id="ovGames">-</div><div class="stat-label">Total Game</div></div>
+          <div class="stat-card c2"><div class="stat-icon">💰</div><div class="stat-val" id="ovTotal">-</div><div class="stat-label">Total Donasi</div></div>
+          <div class="stat-card c3"><div class="stat-icon">📊</div><div class="stat-val" id="ovTrx">-</div><div class="stat-label">Transaksi</div></div>
+          <div class="stat-card c4"><div class="stat-icon">👥</div><div class="stat-val" id="ovActive">-</div><div class="stat-label">Game Aktif</div></div>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title"><span>🏆</span> Performa Per Game</div>
+          </div>
+          <div class="tbl-wrap">
+            <table>
+              <thead><tr><th>Game</th><th>Universe ID</th><th>Saweria</th><th>SocialBuzz</th><th>Transaksi</th><th>Total Donasi</th><th>Terakhir Aktif</th><th>Aksi</th></tr></thead>
+              <tbody id="ovTbody"><tr><td colspan="8" class="loading"><span class="spinner"></span>Memuat...</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Games Page ── -->
+      <div class="page" id="p-games">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title"><span>🎮</span> Daftar Game</div>
+            <button class="btn btn-primary btn-sm" onclick="openAddGame()">➕ Tambah Game</button>
+          </div>
+          <div class="sbar">
+            <input type="text" id="gameSearch" placeholder="Cari nama game..." oninput="filterGames()">
+          </div>
+          <div class="tbl-wrap">
+            <table>
+              <thead><tr><th>Nama</th><th>ID</th><th>Universe ID</th><th>Topic</th><th>Integrasi</th><th>Donasi</th><th>Total</th><th>Aksi</th></tr></thead>
+              <tbody id="gameTbody"><tr><td colspan="8" class="loading"><span class="spinner"></span>Memuat...</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── All Donations Page ── -->
+      <div class="page" id="p-donations">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title"><span>💰</span> Semua Donasi</div>
+            <button class="btn btn-ghost btn-sm" onclick="exportAllCSV()">⬇️ Export CSV</button>
+          </div>
+          <div class="sbar">
+            <input type="text" id="allDonSearch" placeholder="Cari username..." oninput="debounceAllDon()">
+            <select id="allDonGame" onchange="loadAllDonations(0)">
+              <option value="">Semua Game</option>
+            </select>
+          </div>
+          <div class="tbl-wrap">
+            <table>
+              <thead><tr><th>#</th><th>Waktu</th><th>Game</th><th>Username</th><th>Platform</th><th>Jumlah</th><th>Pesan</th></tr></thead>
+              <tbody id="allDonTbody"><tr><td colspan="7" class="loading"><span class="spinner"></span>Memuat...</td></tr></tbody>
+            </table>
+          </div>
+          <div class="pag" id="allDonPag"></div>
+        </div>
+      </div>
+
+      <!-- ── Admin Settings Page ── -->
+      <div class="page" id="p-admin-settings">
+        <div class="card">
+          <div class="card-header"><div class="card-title"><span>🔐</span> Ganti Password Admin</div></div>
+          <div style="max-width:400px">
+            <div class="fg"><label>Username Baru</label><input id="newAdminUser" placeholder="Username admin"></div>
+            <div class="fg"><label>Password Baru</label><input id="newAdminPwd" type="password" placeholder="Min. 6 karakter"></div>
+            <div class="fg"><label>Konfirmasi Password</label><input id="newAdminPwd2" type="password" placeholder="Ulangi"></div>
+            <button class="btn btn-primary" onclick="changeAdminCreds()">💾 Simpan Perubahan</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header"><div class="card-title"><span>ℹ️</span> Info Sistem</div></div>
+          <div id="sysInfo" style="color:var(--muted);font-family:'JetBrains Mono',monospace;font-size:13px;line-height:2"></div>
+        </div>
+      </div>
+
+    </div><!-- /content -->
+  </div><!-- /main -->
+</div><!-- /layout -->
+
+<script>
+(function(){
+'use strict';
+
+// ── State ──
+var TOKEN = '';
+var ADMIN_USER = '';
+var allGames   = [];
+var editGameId = null;
+var resetGameId = null;
+var donGameId  = null;
+var donPage    = 0;
+var donTotalRows = 0;
+var donLimit   = 30;
+var allDonPage = 0;
+var allDonTotal = 0;
+var allDonLimit = 50;
+var donSearchTimer = null;
+var allDonTimer = null;
+var currentPage = 'overview';
+
+// ── Init ──
+(function init(){
+  var params = new URLSearchParams(location.search);
+  TOKEN = params.get('token') || '';
+  if(!TOKEN){ location.href = '/'; return; }
+  try{
+    var dec = atob(TOKEN);
+    ADMIN_USER = dec.split(':')[0];
+    document.getElementById('sbAdminName').textContent = ADMIN_USER;
+    document.getElementById('newAdminUser').value = ADMIN_USER;
+  }catch(e){}
+  loadOverview();
+})();
+
+// ── Navigation ──
+window.navTo = function(id){
+  document.querySelectorAll('.nav-item').forEach(function(el){ el.classList.remove('active'); });
+  document.querySelectorAll('.page').forEach(function(el){ el.classList.remove('active'); });
+  document.getElementById('p-' + id).classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(function(el){
+    if(el.getAttribute('onclick') && el.getAttribute('onclick').includes("'" + id + "'")){
+      el.classList.add('active');
+    }
+  });
+  currentPage = id;
+  var titles = {
+    'overview':{'h':'Dashboard','s':'Overview sistem & statistik'},
+    'games':{'h':'Kelola Game','s':'Tambah, edit, hapus game'},
+    'donations':{'h':'Semua Donasi','s':'Riwayat donasi seluruh game'},
+    'admin-settings':{'h':'Admin Settings','s':'Konfigurasi administrator'}
+  };
+  var t = titles[id] || {'h':id,'s':''};
+  document.getElementById('pageHeading').textContent = t.h;
+  document.getElementById('pageSubtitle').textContent = t.s;
+  document.getElementById('topAddBtn').style.display = id === 'games' ? 'inline-flex' : 'none';
+  if(id === 'overview')   loadOverview();
+  if(id === 'games')      loadGames();
+  if(id === 'donations')  initAllDonations();
+  if(id === 'admin-settings') loadSysInfo();
+};
+
+window.refreshCurrent = function(){ navTo(currentPage); };
+
+// ── API helper ──
+function api(method, path, body){
+  var opts = { method: method, headers: {'Content-Type':'application/json'} };
+  if(body) opts.body = JSON.stringify(body);
+  return fetch(path, opts).then(function(r){
+    if(r.status === 401){ location.href = '/'; throw new Error('Unauthorized'); }
+    return r.json();
+  });
+}
+function apiGet(path){ return api('GET', path); }
+function apiPost(path, body){ return api('POST', path, body); }
+function apiPut(path, body){ return api('PUT', path, body); }
+function apiDel(path){ return api('DELETE', path); }
+
+// ── Toast ──
+function toast(msg, type){
+  var map = {ok:'t-ok', err:'t-err', info:'t-info'};
+  var el = document.getElementById(type === 'err' ? 'tErr' : type === 'info' ? 'tInfo' : 'tOk');
+  el.textContent = msg;
+  el.style.display = 'block';
+  clearTimeout(el._t);
+  el._t = setTimeout(function(){ el.style.display = 'none'; }, 3500);
+}
+
+// ── Formatters ──
+function fmt(n){ return new Intl.NumberFormat('id-ID',{style:'currency',currency:'IDR',minimumFractionDigits:0}).format(Number(n)||0); }
+function fmtShort(n){
+  n = Number(n)||0;
+  if(n>=1000000) return 'Rp'+(n/1000000).toFixed(1)+'M';
+  if(n>=1000) return 'Rp'+(n/1000).toFixed(0)+'K';
+  return 'Rp'+n;
+}
+function fmtDate(s){ return s ? new Date(s).toLocaleString('id-ID',{dateStyle:'short',timeStyle:'short'}) : '-'; }
+function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function srcBadge(s){
+  var map = {Saweria:'b-green', SocialBuzz:'b-blue', Test:'b-yellow'};
+  return '<span class="badge '+(map[s]||'b-yellow')+'">'+esc(s||'?')+'</span>';
+}
+
+// ── Overview ──
+function loadOverview(){
+  apiGet('/api/admin/users?token=' + encodeURIComponent(TOKEN))
+    .then(function(d){
+      if(!d.success){ toast('Gagal load data','err'); return; }
+      allGames = d.users || [];
+      var totalDon = allGames.reduce(function(s,g){ return s + (parseInt(g.donationTotal)||0); }, 0);
+      var totalTrx = allGames.reduce(function(s,g){ return s + (parseInt(g.donationCount)||0); }, 0);
+      var active   = allGames.filter(function(g){ return parseInt(g.donationCount) > 0; }).length;
+      document.getElementById('ovGames').textContent  = allGames.length;
+      document.getElementById('ovTotal').textContent  = fmtShort(totalDon);
+      document.getElementById('ovTrx').textContent    = totalTrx.toLocaleString();
+      document.getElementById('ovActive').textContent = active;
+
+      var tbody = document.getElementById('ovTbody');
+      if(!allGames.length){ tbody.innerHTML = '<tr><td colspan="8"><div class="empty"><div class="ei">🎮</div><p>Belum ada game</p></div></td></tr>'; return; }
+      tbody.innerHTML = allGames.map(function(g){
+        return '<tr>' +
+          '<td><div class="td-name">'+esc(g.name)+'</div><div class="td-id">'+esc(g.id)+'</div></td>' +
+          '<td class="td-id">'+esc(g.universeId)+'</td>' +
+          '<td>'+(g.saweriaToken ? '<span class="badge b-green">✓ Set</span>' : '<span class="badge b-yellow">—</span>')+'</td>' +
+          '<td>'+(g.socialbuzzToken ? '<span class="badge b-blue">✓ Set</span>' : '<span class="badge b-yellow">—</span>')+'</td>' +
+          '<td><span class="badge b-cyan">'+Number(g.donationCount||0).toLocaleString()+'x</span></td>' +
+          '<td class="td-money">'+fmt(g.donationTotal)+'</td>' +
+          '<td style="color:var(--muted);font-size:12px">'+fmtDate(g.lastActive)+'</td>' +
+          '<td><div class="btn-group">' +
+            '<button class="btn btn-ghost btn-xs" onclick="openDonModal(\''+esc(g.id)+'\',\''+esc(g.name)+'\')">📜</button>' +
+            '<button class="btn btn-ghost btn-xs" onclick="openUrlModal(\''+esc(g.id)+'\')">🔗</button>' +
+          '</div></td>' +
+        '</tr>';
+      }).join('');
+    }).catch(function(){ toast('Connection error','err'); });
+}
+
+// ── Games ──
+function loadGames(){
+  apiGet('/api/admin/users?token=' + encodeURIComponent(TOKEN))
+    .then(function(d){
+      if(!d.success){ toast('Gagal load games','err'); return; }
+      allGames = d.users || [];
+      renderGames(allGames);
+    }).catch(function(){ toast('Connection error','err'); });
+}
+
+window.filterGames = function(){
+  var q = document.getElementById('gameSearch').value.toLowerCase();
+  var filtered = allGames.filter(function(g){ return g.name.toLowerCase().includes(q) || g.id.toLowerCase().includes(q); });
+  renderGames(filtered);
+};
+
+function renderGames(list){
+  var tbody = document.getElementById('gameTbody');
+  if(!list.length){ tbody.innerHTML = '<tr><td colspan="8"><div class="empty"><div class="ei">🎮</div><p>Tidak ada game</p></div></td></tr>'; return; }
+  tbody.innerHTML = list.map(function(g){
+    return '<tr>' +
+      '<td><div class="td-name">'+esc(g.name)+'</div></td>' +
+      '<td class="td-id">'+esc(g.id)+'</td>' +
+      '<td class="td-id">'+esc(g.universeId)+'</td>' +
+      '<td><span class="badge b-pink">'+esc(g.topic||'ArchieDonationIDR')+'</span></td>' +
+      '<td><div style="display:flex;gap:4px;flex-wrap:wrap">' +
+        (g.saweriaToken ? '<span class="badge b-green">Saweria</span>' : '') +
+        (g.socialbuzzToken ? '<span class="badge b-blue">SocialBuzz</span>' : '') +
+        (!g.saweriaToken && !g.socialbuzzToken ? '<span class="badge b-yellow">—</span>' : '') +
+      '</div></td>' +
+      '<td><span class="badge b-cyan">'+Number(g.donationCount||0).toLocaleString()+'x</span></td>' +
+      '<td class="td-money">'+fmt(g.donationTotal)+'</td>' +
+      '<td><div class="btn-group">' +
+        '<button class="btn btn-ghost btn-xs" title="Edit" onclick="openEditGame(\''+esc(g.id)+'\')">✏️</button>' +
+        '<button class="btn btn-warn btn-xs" title="Reset Password" onclick="openResetPwd(\''+esc(g.id)+'\',\''+esc(g.name)+'\')">🔑</button>' +
+        '<button class="btn btn-ghost btn-xs" title="Lihat Donasi" onclick="openDonModal(\''+esc(g.id)+'\',\''+esc(g.name)+'\')">📜</button>' +
+        '<button class="btn btn-ghost btn-xs" title="Webhook URLs" onclick="openUrlModal(\''+esc(g.id)+'\')">🔗</button>' +
+        '<button class="btn btn-danger btn-xs" title="Hapus" onclick="openDelGame(\''+esc(g.id)+'\',\''+esc(g.name)+'\')">🗑️</button>' +
+      '</div></td>' +
+    '</tr>';
+  }).join('');
+}
+
+// ── Add/Edit Game ──
+window.openAddGame = function(){
+  editGameId = null;
+  document.getElementById('gmTitle').textContent = '➕ Tambah Game Baru';
+  document.getElementById('gmName').value = '';
+  document.getElementById('gmUid').value  = '';
+  document.getElementById('gmApiKey').value  = '';
+  document.getElementById('gmTopic').value   = 'ArchieDonationIDR';
+  document.getElementById('gmSecret').value  = '';
+  document.getElementById('gmSawToken').value = '';
+  document.getElementById('gmSbToken').value  = '';
+  document.getElementById('gmPwd').value      = '';
+  document.getElementById('gmPwdWrap').style.display = 'block';
+  document.getElementById('gameModal').classList.add('active');
+};
+
+window.openEditGame = function(id){
+  var g = allGames.find(function(x){ return x.id === id; });
+  if(!g) return;
+  editGameId = id;
+  document.getElementById('gmTitle').textContent = '✏️ Edit Game — ' + g.name;
+  document.getElementById('gmName').value   = g.name;
+  document.getElementById('gmUid').value    = g.universeId;
+  document.getElementById('gmApiKey').value = ''; // don't prefill API key
+  document.getElementById('gmTopic').value  = g.topic || 'ArchieDonationIDR';
+  document.getElementById('gmSecret').value = '';
+  document.getElementById('gmSawToken').value = '';
+  document.getElementById('gmSbToken').value  = '';
+  document.getElementById('gmPwdWrap').style.display = 'none';
+  document.getElementById('gameModal').classList.add('active');
+};
+
+window.saveGame = function(){
+  var name   = document.getElementById('gmName').value.trim();
+  var uid    = document.getElementById('gmUid').value.trim();
+  var apiKey = document.getElementById('gmApiKey').value.trim();
+  var topic  = document.getElementById('gmTopic').value.trim() || 'ArchieDonationIDR';
+  var secret = document.getElementById('gmSecret').value.trim();
+  var sawTok = document.getElementById('gmSawToken').value.trim();
+  var sbTok  = document.getElementById('gmSbToken').value.trim();
+  var pwd    = document.getElementById('gmPwd').value;
+
+  if(!name) return toast('Nama game wajib diisi','err');
+  if(!uid)  return toast('Universe ID wajib diisi','err');
+
+  if(!editGameId){
+    if(!apiKey)       return toast('API Key wajib diisi','err');
+    if(!pwd || pwd.length < 6) return toast('Password minimal 6 karakter','err');
+    apiPost('/api/admin/games', { token:TOKEN, name, universeId:uid, apiKey, topic, webhookSecret:secret||undefined, saweriaToken:sawTok||undefined, socialbuzzToken:sbTok||undefined, password:pwd })
+      .then(function(d){
+        if(!d.success){ toast(d.error||'Gagal tambah game','err'); return; }
+        toast('Game "'+d.game.name+'" berhasil ditambahkan!','ok');
+        closeModal('gameModal');
+        loadGames();
+        if(currentPage === 'overview') loadOverview();
+      }).catch(function(){ toast('Connection error','err'); });
+  } else {
+    var body = { token:TOKEN, name, universeId:uid, topic };
+    if(apiKey) body.apiKey = apiKey;
+    if(sawTok) body.saweriaToken = sawTok;
+    if(sbTok)  body.socialbuzzToken = sbTok;
+    apiPut('/api/admin/games/' + editGameId, body)
+      .then(function(d){
+        if(!d.success){ toast(d.error||'Gagal update game','err'); return; }
+        toast('Game berhasil diupdate!','ok');
+        closeModal('gameModal');
+        loadGames();
+        if(currentPage === 'overview') loadOverview();
+      }).catch(function(){ toast('Connection error','err'); });
+  }
+};
+
+// ── Reset Password ──
+window.openResetPwd = function(id, name){
+  resetGameId = id;
+  document.getElementById('resetGameName').textContent = name;
+  document.getElementById('resetPwd').value  = '';
+  document.getElementById('resetPwd2').value = '';
+  document.getElementById('resetModal').classList.add('active');
+};
+
+window.doResetPassword = function(){
+  var pwd  = document.getElementById('resetPwd').value;
+  var pwd2 = document.getElementById('resetPwd2').value;
+  if(!pwd || pwd.length < 6) return toast('Password minimal 6 karakter','err');
+  if(pwd !== pwd2) return toast('Password tidak cocok','err');
+  apiPost('/api/admin/reset-password', { token:TOKEN, gameId:resetGameId, newPassword:pwd })
+    .then(function(d){
+      if(!d.success){ toast(d.error||'Gagal reset password','err'); return; }
+      toast('Password berhasil direset!','ok');
+      closeModal('resetModal');
+    }).catch(function(){ toast('Connection error','err'); });
+};
+
+// ── Delete Game ──
+window.openDelGame = function(id, name){
+  document.getElementById('delMsg').textContent = 'Hapus game "'+name+'"? Semua data donasi akan hilang permanen.';
+  document.getElementById('delConfirm').onclick = function(){ doDeleteGame(id, name); };
+  document.getElementById('delModal').classList.add('active');
+};
+
+function doDeleteGame(id, name){
+  apiDel('/api/admin/games/' + id + '?token=' + encodeURIComponent(TOKEN))
+    .then(function(d){
+      if(!d.success){ toast(d.error||'Gagal hapus','err'); return; }
+      toast('Game "'+name+'" dihapus','ok');
+      closeModal('delModal');
+      loadGames();
+      if(currentPage === 'overview') loadOverview();
+    }).catch(function(){ toast('Connection error','err'); });
+}
+
+// ── Donations Modal ──
+window.openDonModal = function(id, name){
+  donGameId = id;
+  donPage   = 0;
+  document.getElementById('donModalName').textContent = name;
+  document.getElementById('donModal').classList.add('active');
+  loadDonStats(id);
+  loadDonPage(0);
+};
+
+function loadDonStats(id){
+  apiGet('/api/admin/donations?token=' + encodeURIComponent(TOKEN) + '&gameId=' + id + '&limit=1&offset=0')
+    .then(function(d){
+      if(!d.success) return;
+      document.getElementById('dmCount').textContent = (d.total||0).toLocaleString();
+    });
+  // Also get stats via user stats endpoint—use game context
+}
+
+window.debounceSearch = function(){
+  clearTimeout(donSearchTimer);
+  donSearchTimer = setTimeout(function(){ loadDonPage(0); }, 400);
+};
+
+function loadDonPage(offset){
+  donPage = offset;
+  var search = document.getElementById('donSearch').value.trim();
+  var tbody  = document.getElementById('donTbody');
+  tbody.innerHTML = '<tr><td colspan="6" class="loading"><span class="spinner"></span>Memuat...</td></tr>';
+  apiGet('/api/admin/donations?token='+encodeURIComponent(TOKEN)+'&gameId='+donGameId+'&limit='+donLimit+'&offset='+offset+'&search='+encodeURIComponent(search))
+    .then(function(d){
+      if(!d.success){ tbody.innerHTML = '<tr><td colspan="6" style="color:var(--danger);text-align:center;padding:20px">'+esc(d.error)+'</td></tr>'; return; }
+      donTotalRows = d.total;
+      document.getElementById('dmCount').textContent = (d.total||0).toLocaleString();
+      var totalAmt = 0;
+      if(!d.donations.length){ tbody.innerHTML = '<tr><td colspan="6"><div class="empty"><div class="ei">💸</div><p>Belum ada donasi</p></div></td></tr>'; renderDonPag(); return; }
+      tbody.innerHTML = d.donations.map(function(don, i){
+        totalAmt += parseInt(don.amount)||0;
+        return '<tr>' +
+          '<td style="color:var(--muted)">'+(offset+i+1)+'</td>' +
+          '<td style="font-size:12px;white-space:nowrap">'+fmtDate(don.donated_at)+'</td>' +
+          '<td><strong style="color:var(--success)">'+esc(don.username||'')+'</strong>' +
+            (don.display_name && don.display_name !== don.username ? '<br><span style="color:var(--muted);font-size:11px">'+esc(don.display_name)+'</span>' : '') + '</td>' +
+          '<td>'+srcBadge(don.source)+'</td>' +
+          '<td class="td-money">'+fmt(don.amount)+'</td>' +
+          '<td style="color:var(--muted);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px">'+esc(don.message||'-')+'</td>' +
+        '</tr>';
+      }).join('');
+      renderDonPag();
+    }).catch(function(){ tbody.innerHTML = '<tr><td colspan="6" style="color:var(--danger);text-align:center">Error</td></tr>'; });
+}
+
+function renderDonPag(){
+  var pages = Math.ceil(donTotalRows / donLimit);
+  var cur   = Math.floor(donPage / donLimit);
+  var el    = document.getElementById('donPag');
+  if(pages <= 1){ el.innerHTML = ''; return; }
+  el.innerHTML =
+    '<button class="btn btn-ghost btn-xs" id="dpPrev"'+(cur===0?' disabled':'')+'>← Prev</button>' +
+    '<span>'+(cur+1)+' / '+pages+'</span>' +
+    '<button class="btn btn-ghost btn-xs" id="dpNext"'+(cur>=pages-1?' disabled':'')+'>Next →</button>';
+  if(cur > 0) document.getElementById('dpPrev').addEventListener('click', function(){ loadDonPage((cur-1)*donLimit); });
+  if(cur < pages-1) document.getElementById('dpNext').addEventListener('click', function(){ loadDonPage((cur+1)*donLimit); });
+}
+
+// ── Webhook URL Modal ──
+window.openUrlModal = function(id){
+  var g = allGames.find(function(x){ return x.id === id; });
+  if(!g) return;
+  document.getElementById('urlModalName').textContent = g.name;
+  var base = location.protocol + '//' + location.host;
+  var secret = g.webhookSecret;
+  document.getElementById('urlContent').innerHTML =
+    mkUrlBox('Saweria', base + '/' + secret + '/saweria') +
+    mkUrlBox('SocialBuzz', base + '/' + secret + '/socialbuzz') +
+    mkUrlBox('Test Endpoint', base + '/' + secret + '/test');
+  document.getElementById('urlModal').classList.add('active');
+};
+
+function mkUrlBox(label, url){
+  var uid = 'url_' + Math.random().toString(36).slice(2,7);
+  return '<div class="wh-box">' +
+    '<div class="wh-label"><span>'+label+'</span><button class="btn btn-ghost btn-xs" onclick="copyText(\''+uid+'\')">Copy</button></div>' +
+    '<div class="wh-url" id="'+uid+'">'+esc(url)+'</div>' +
+  '</div>';
+}
+
+window.copyText = function(id){
+  navigator.clipboard.writeText(document.getElementById(id).textContent)
+    .then(function(){ toast('URL disalin!','ok'); })
+    .catch(function(){ toast('Gagal copy','err'); });
+};
+
+// ── All Donations ──
+function initAllDonations(){
+  var sel = document.getElementById('allDonGame');
+  sel.innerHTML = '<option value="">Semua Game</option>';
+  if(allGames.length){
+    allGames.forEach(function(g){
+      sel.innerHTML += '<option value="'+esc(g.id)+'">'+esc(g.name)+'</option>';
+    });
+  } else {
+    apiGet('/api/admin/users?token='+encodeURIComponent(TOKEN))
+      .then(function(d){
+        allGames = d.users || [];
+        allGames.forEach(function(g){ sel.innerHTML += '<option value="'+esc(g.id)+'">'+esc(g.name)+'</option>'; });
+      });
+  }
+  loadAllDonations(0);
+}
+
+window.debounceAllDon = function(){
+  clearTimeout(allDonTimer);
+  allDonTimer = setTimeout(function(){ loadAllDonations(0); }, 400);
+};
+
+window.loadAllDonations = function(offset){
+  if(offset === undefined) offset = 0;
+  allDonPage = offset;
+  var search = document.getElementById('allDonSearch').value.trim();
+  var gameId = document.getElementById('allDonGame').value;
+  if(!gameId){ renderAllDonEmpty(); return; }
+  var tbody = document.getElementById('allDonTbody');
+  tbody.innerHTML = '<tr><td colspan="7" class="loading"><span class="spinner"></span>Memuat...</td></tr>';
+  apiGet('/api/admin/donations?token='+encodeURIComponent(TOKEN)+'&gameId='+gameId+'&limit='+allDonLimit+'&offset='+offset+'&search='+encodeURIComponent(search))
+    .then(function(d){
+      if(!d.success){ tbody.innerHTML = '<tr><td colspan="7" style="color:var(--danger);text-align:center;padding:20px">'+esc(d.error)+'</td></tr>'; return; }
+      allDonTotal = d.total;
+      var gname = (allGames.find(function(x){ return x.id===gameId; })||{}).name || gameId;
+      if(!d.donations.length){ tbody.innerHTML = '<tr><td colspan="7"><div class="empty"><div class="ei">💸</div><p>Belum ada donasi</p></div></td></tr>'; renderAllDonPag(); return; }
+      tbody.innerHTML = d.donations.map(function(don, i){
+        return '<tr>' +
+          '<td style="color:var(--muted)">'+(offset+i+1)+'</td>' +
+          '<td style="font-size:12px;white-space:nowrap">'+fmtDate(don.donated_at)+'</td>' +
+          '<td><span class="badge b-pink">'+esc(gname)+'</span></td>' +
+          '<td><strong style="color:var(--success)">'+esc(don.username||'')+'</strong></td>' +
+          '<td>'+srcBadge(don.source)+'</td>' +
+          '<td class="td-money">'+fmt(don.amount)+'</td>' +
+          '<td style="color:var(--muted);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px">'+esc(don.message||'-')+'</td>' +
+        '</tr>';
+      }).join('');
+      renderAllDonPag();
+    }).catch(function(){ tbody.innerHTML = '<tr><td colspan="7" style="color:var(--danger);text-align:center">Error</td></tr>'; });
+};
+
+function renderAllDonEmpty(){
+  document.getElementById('allDonTbody').innerHTML = '<tr><td colspan="7"><div class="empty"><div class="ei">⬆️</div><p>Pilih game dulu dari dropdown</p></div></td></tr>';
+}
+
+function renderAllDonPag(){
+  var pages = Math.ceil(allDonTotal / allDonLimit);
+  var cur   = Math.floor(allDonPage / allDonLimit);
+  var el    = document.getElementById('allDonPag');
+  if(pages <= 1){ el.innerHTML = ''; return; }
+  el.innerHTML =
+    '<button class="btn btn-ghost btn-xs" id="adPrev"'+(cur===0?' disabled':'')+'>← Prev</button>' +
+    '<span style="color:var(--muted)">'+(cur+1)+' / '+pages+' ('+allDonTotal+')</span>' +
+    '<button class="btn btn-ghost btn-xs" id="adNext"'+(cur>=pages-1?' disabled':'')+'>Next →</button>';
+  if(cur > 0) document.getElementById('adPrev').addEventListener('click', function(){ loadAllDonations((cur-1)*allDonLimit); });
+  if(cur < pages-1) document.getElementById('adNext').addEventListener('click', function(){ loadAllDonations((cur+1)*allDonLimit); });
+}
+
+// ── Export CSV ──
+window.exportAllCSV = function(){
+  var gameId = document.getElementById('allDonGame').value;
+  if(!gameId){ toast('Pilih game dulu','info'); return; }
+  toast('Mengambil data...','info');
+  apiGet('/api/admin/donations?token='+encodeURIComponent(TOKEN)+'&gameId='+gameId+'&limit=5000&offset=0')
+    .then(function(d){
+      if(!d.success){ toast('Gagal export','err'); return; }
+      var gname = (allGames.find(function(x){ return x.id===gameId; })||{}).name || gameId;
+      var rows = d.donations.map(function(x, i){
+        return [i+1, new Date(x.donated_at).toISOString(), x.username, x.display_name||'', x.source, x.amount, (x.message||'').replace(/,/g,' ')].join(',');
+      });
+      var csv = ['No,Waktu,Username,Nama,Platform,Jumlah,Pesan'].concat(rows).join('\n');
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
+      a.download = 'donasi_'+gname.replace(/\s+/g,'_')+'_'+Date.now()+'.csv';
+      a.click();
+      toast('Export berhasil!','ok');
+    }).catch(function(){ toast('Gagal export','err'); });
+};
+
+// ── Admin Settings ──
+window.changeAdminCreds = function(){
+  toast('Fitur ini memerlukan backend endpoint — hubungi developer.','info');
+};
+
+function loadSysInfo(){
+  var el = document.getElementById('sysInfo');
+  el.innerHTML =
+    'Admin User: <strong style="color:var(--accent)">'+esc(ADMIN_USER)+'</strong><br>' +
+    'Total Games: <strong style="color:var(--accent2)">'+allGames.length+'</strong><br>' +
+    'Dashboard URL: <strong style="color:var(--success)">'+location.protocol+'//'+location.host+'</strong><br>' +
+    'Token (truncated): <strong style="color:var(--warn)">'+TOKEN.slice(0,20)+'...</strong>';
+}
+
+// ── Logout ──
+window.doLogout = function(){
+  location.href = '/';
+};
+
+// ── Modal helpers ──
+window.closeModal = function(id){
+  document.getElementById(id).classList.remove('active');
+};
+document.querySelectorAll('.modal').forEach(function(m){
+  m.addEventListener('click', function(e){
+    if(e.target === m) m.classList.remove('active');
+  });
+});
+
+})();
+</script>
+</body>
+</html>
