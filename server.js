@@ -643,6 +643,12 @@ app.get('/', (_req, res) => {
 </body></html>`);
 });
 
+app.get('/admin/dashboard', (req, res) => {
+    const token = req.query.token;
+    if (!adminFromToken(token || '')) return res.redirect('/');
+    res.type('html').send(fs.readFileSync(path.join(__dirname, 'admin.html'), 'utf8'));
+});
+
 app.use((_req, res) => res.status(404).json({ error: 'Not found' }));
 
 async function autoMigrate() {
