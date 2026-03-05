@@ -26,7 +26,9 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#0a0e27;color:#fff;m
 .ir:last-child{border:none}
 .il{color:#94a3b8}.iv{color:#fff;font-weight:500}
 .ub{background:rgba(0,0,0,.3);border:1px solid rgba(139,92,246,.2);border-radius:10px;padding:14px;margin:10px 0}
+.ub.discord-box{border-color:rgba(88,101,242,.35);background:rgba(88,101,242,.05)}
 .ulb{color:#8b5cf6;font-size:12px;font-weight:600;text-transform:uppercase;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center}
+.ulb.discord-label{color:#7b8fff}
 .ut{color:#10b981;font-family:monospace;font-size:12px;word-break:break-all;padding:10px;background:rgba(0,0,0,.4);border-radius:6px}
 .btn{padding:9px 18px;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;transition:all .3s;display:inline-flex;align-items:center;gap:5px;background:linear-gradient(135deg,#8b5cf6,#3b82f6);color:#fff}
 .btn:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(139,92,246,.4)}
@@ -36,6 +38,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#0a0e27;color:#fff;m
 .bs{background:rgba(16,185,129,.15);color:#10b981;border:1px solid rgba(16,185,129,.3)}
 .bw{background:rgba(245,158,11,.15);color:#f59e0b;border:1px solid rgba(245,158,11,.3)}
 .bp{background:rgba(139,92,246,.15);color:#8b5cf6;border:1px solid rgba(139,92,246,.3)}
+.bd{background:rgba(88,101,242,.15);color:#7b8fff;border:1px solid rgba(88,101,242,.35)}
 .tbl-wrap{overflow-x:auto}
 table{width:100%;border-collapse:collapse;font-size:13px}
 thead{background:rgba(139,92,246,.1)}
@@ -142,6 +145,11 @@ tr:hover td{background:rgba(139,92,246,.04)}
       <div class="ub"><div class="ulb"><span>Saweria</span><button class="btn btn-sm" id="cpySaw">Copy</button></div><div class="ut" id="sawURL">-</div></div>
       <div class="ub"><div class="ulb"><span>SocialBuzz</span><button class="btn btn-sm" id="cpySb">Copy</button></div><div class="ut" id="sbURL">-</div></div>
       <div class="ub"><div class="ulb"><span>Test URL</span><button class="btn btn-sm" id="cpyTest">Copy</button></div><div class="ut" id="testURL">-</div></div>
+      <!-- Discord status block -->
+      <div class="ub discord-box" id="discordBlock" style="display:none">
+        <div class="ulb discord-label"><span>&#x1F4AC; Discord Notification</span></div>
+        <div id="discordStatus" style="font-size:13px;color:#7b8fff">Memuat...</div>
+      </div>
     </div>
   </div>
 </div>
@@ -167,10 +175,17 @@ tr:hover td{background:rgba(139,92,246,.04)}
         '<div class="ir"><span class="il">Universe ID</span><span class="iv">' + esc(G.uid) + '</span></div>' +
         '<div class="ir"><span class="il">Topic</span><span class="iv">' + esc(G.topic) + '</span></div>' +
         '<div class="ir"><span class="il">Saweria</span><span class="iv"><span class="badge ' + (G.hasSaw ? 'bs' : 'bw') + '">' + (G.hasSaw ? 'Set' : 'Optional') + '</span></span></div>' +
-        '<div class="ir"><span class="il">SocialBuzz</span><span class="iv"><span class="badge ' + (G.hasSb ? 'bs' : 'bw') + '">' + (G.hasSb ? 'Set' : 'Optional') + '</span></span></div>';
+        '<div class="ir"><span class="il">SocialBuzz</span><span class="iv"><span class="badge ' + (G.hasSb ? 'bs' : 'bw') + '">' + (G.hasSb ? 'Set' : 'Optional') + '</span></span></div>' +
+        '<div class="ir"><span class="il">Discord Notif</span><span class="iv"><span class="badge ' + (G.hasDiscord ? 'bd' : 'bw') + '">' + (G.hasDiscord ? '💬 Aktif' : 'Tidak diset') + '</span></span></div>';
       document.getElementById('sawURL').textContent  = G.sawUrl;
       document.getElementById('sbURL').textContent   = G.sbUrl;
       document.getElementById('testURL').textContent = G.testUrl + '?password=' + encodeURIComponent(pwd);
+      // Discord block in settings tab
+      var discordBlock = document.getElementById('discordBlock');
+      discordBlock.style.display = 'block';
+      document.getElementById('discordStatus').innerHTML = G.hasDiscord
+        ? '<span style="color:#10b981">✅ Discord webhook aktif — notifikasi donasi akan dikirim ke channel Discord yang terkonfigurasi.</span>'
+        : '<span style="color:#94a3b8">Discord webhook belum diset. Hubungi admin untuk mengaktifkan notifikasi Discord.</span>';
       document.title = G.name + ' - Dashboard';
       loadStats();
     })
