@@ -236,47 +236,69 @@ function formatRupiah(n) {
 // ─────────────────────────────────────────────────────────────────────────────
 //  Discord Webhook
 // ─────────────────────────────────────────────────────────────────────────────
-const SOURCE_COLORS = {
-    Saweria:    0x10b981,   // green
-    SocialBuzz: 0x6366f1,   // indigo
-    Test:       0xfbbf24,   // yellow
-};
-
-const SOURCE_ICONS = {
-    Saweria:    '🟢',
-    SocialBuzz: '🔵',
-    Test:       '🟡',
-};
 
 async function sendToDiscord(game, donation, donationId) {
     if (!game.discordWebhookUrl) return;
     try {
-        const color  = SOURCE_COLORS[donation.source] || 0x8b5cf6;
-        const icon   = SOURCE_ICONS[donation.source]  || '💸';
-        const amount = formatRupiah(donation.amount);
-        const embed  = {
-            title:       `${icon} Donasi Baru — ${game.name}`,
-            color,
-            fields: [
-                { name: '👤 Username',     value: donation.username    || '-', inline: true  },
-                { name: '🏷️ Nama',         value: donation.displayName || '-', inline: true  },
-                { name: '💰 Jumlah',       value: `**${amount}**`,              inline: true  },
-                { name: '📡 Platform',     value: donation.source      || '-', inline: true  },
-                { name: '🎮 Game',         value: game.name,                    inline: true  },
-                { name: '🆔 Donation ID',  value: `#${donationId}`,             inline: true  },
-                { name: '💬 Pesan',        value: donation.message    || '*(tidak ada)*', inline: false },
-            ],
-            footer:    { text: 'Archie Webhook System' },
-            timestamp: new Date().toISOString(),
+        const SOURCE_COLORS = {
+            Saweria:    0x00b894,
+            SocialBuzz: 0x4f46e5,
+            Test:       0x94a3b8,
         };
-        await axios.post(game.discordWebhookUrl, { embeds: [embed] }, {
+
+        const color  = SOURCE_COLORS[donation.source] || 0x6366f1;
+        const amount = formatRupiah(donation.amount);
+        const ts     = new Date().toISOString();
+
+        const embed = {
+            color,
+            author: {
+                name: game.name,
+            },
+            title: 'New Donation',
+            fields: [
+                {
+                    name: 'Donor',
+                    value: donation.displayName && donation.displayName !== donation.username
+                        ? `${donation.username}\n${donation.displayName}`
+                        : donation.username || 'Anonymous',
+                    inline: true,
+                },
+                {
+                    name: 'Amount',
+                    value: amount,
+                    inline: true,
+                },
+                {
+                    name: 'Platform',
+                    value: donation.source || '-',
+                    inline: true,
+                },
+                ...(donation.message ? [{
+                    name: 'Message',
+                    value: donation.message.length > 200
+                        ? donation.message.slice(0, 197) + '...'
+                        : donation.message,
+                    inline: false,
+                }] : []),
+            ],
+            footer: {
+                text: `Donation #${donationId}`,
+            },
+            timestamp: ts,
+        };
+
+        await axios.post(game.discordWebhookUrl, {
+            username: 'Archie Donations',
+            embeds: [embed],
+        }, {
             headers: { 'Content-Type': 'application/json' },
             timeout: 8000,
         });
-        console.log(`💬 [${game.name}] Discord notif sent`);
+
+        console.log(`[${game.name}] Discord notification sent`);
     } catch (e) {
-        // Non-fatal — log but don't throw
-        console.warn(`⚠️  [${game.name}] Discord notif failed: ${e.response?.status || e.message}`);
+        console.warn(`[${game.name}] Discord notification failed: ${e.response?.status || e.message}`);
     }
 }
 
@@ -447,10 +469,12 @@ app.post('/api/user/discord-webhook', async (req, res) => {
         if (url) {
             try {
                 await axios.post(url, {
+                    username: 'Archie Donations',
                     embeds: [{
-                        title: '✅ Discord Webhook Terhubung!',
-                        color: 0x34d399,
-                        description: `Game **${game.name}** berhasil terhubung ke Discord.\nSetiap donasi masuk akan dikirim ke channel ini.`,
+                        color: 0x00b894,
+                        author: { name: game.name },
+                        title: 'Connection Successful',
+                        description: 'This channel is now connected. Donation notifications will appear here.',
                         footer: { text: 'Archie Webhook System' },
                         timestamp: new Date().toISOString(),
                     }]
