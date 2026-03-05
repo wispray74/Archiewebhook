@@ -11,6 +11,7 @@
   --bg:#060a18;--surface:rgba(10,16,35,.9);--border:rgba(99,102,241,.2);
   --accent:#6366f1;--accent2:#22d3ee;--accent3:#f472b6;
   --text:#e2e8f0;--muted:#64748b;--danger:#f43f5e;--success:#34d399;--warn:#fbbf24;
+  --discord:#5865f2;
 }
 body{font-family:'Syne',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
 body::before{content:'';position:fixed;inset:0;background:
@@ -97,6 +98,7 @@ tr:hover td{background:rgba(99,102,241,.03)}
 .b-blue{background:rgba(99,102,241,.1);color:var(--accent);border:1px solid rgba(99,102,241,.2)}
 .b-cyan{background:rgba(34,211,238,.1);color:var(--accent2);border:1px solid rgba(34,211,238,.2)}
 .b-pink{background:rgba(244,114,182,.1);color:var(--accent3);border:1px solid rgba(244,114,182,.2)}
+.b-discord{background:rgba(88,101,242,.15);color:#7b8fff;border:1px solid rgba(88,101,242,.35)}
 
 /* ── Buttons ── */
 .btn{display:inline-flex;align-items:center;gap:6px;padding:9px 18px;border:none;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;transition:all .2s;font-family:'Syne',sans-serif}
@@ -123,7 +125,7 @@ tr:hover td{background:rgba(99,102,241,.03)}
 .modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:1000;justify-content:center;align-items:center;padding:20px;backdrop-filter:blur(4px)}
 .modal.active{display:flex}
 .mc{background:rgba(10,16,35,.98);border:1px solid rgba(99,102,241,.3);border-radius:20px;padding:32px;width:100%;max-width:520px;max-height:90vh;overflow-y:auto}
-.mc.wide{max-width:680px}
+.mc.wide{max-width:700px}
 .mh{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px}
 .mh h2{font-size:20px;font-weight:800;color:#fff}
 .xbtn{background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer;line-height:1;transition:color .2s}
@@ -135,8 +137,14 @@ tr:hover td{background:rgba(99,102,241,.03)}
 .fg input:focus,.fg select:focus,.fg textarea:focus{border-color:var(--accent)}
 .fg select option{background:#0a1023}
 .fg textarea{resize:vertical;min-height:80px}
+/* Discord field special style */
+.fg.discord-field input{border-color:rgba(88,101,242,.3)}
+.fg.discord-field input:focus{border-color:#5865f2;box-shadow:0 0 0 3px rgba(88,101,242,.1)}
+.fg.discord-field label{color:#7b8fff}
 .fg-row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
 .mf{display:flex;gap:10px;justify-content:flex-end;margin-top:24px}
+.section-divider{border:none;border-top:1px solid rgba(99,102,241,.15);margin:20px 0 4px}
+.section-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:14px}
 
 /* ── Pagination ── */
 .pag{display:flex;justify-content:center;align-items:center;gap:8px;margin-top:16px;font-size:13px;color:var(--muted)}
@@ -211,10 +219,23 @@ tr:hover td{background:rgba(99,102,241,.03)}
       <div class="fg"><label>Topic <small>(default: ArchieDonationIDR)</small></label><input id="gmTopic" placeholder="ArchieDonationIDR"></div>
       <div class="fg"><label>Webhook Secret <small>(auto jika kosong)</small></label><input id="gmSecret" placeholder="(auto-generate)"></div>
     </div>
+
+    <hr class="section-divider">
+    <div class="section-title">🔗 Integrasi Platform</div>
     <div class="fg-row">
       <div class="fg"><label>Saweria Token <small>(opsional)</small></label><input id="gmSawToken" placeholder=""></div>
       <div class="fg"><label>SocialBuzz Token <small>(opsional)</small></label><input id="gmSbToken" placeholder=""></div>
     </div>
+
+    <hr class="section-divider">
+    <div class="section-title">💬 Discord Notification</div>
+    <div class="fg discord-field">
+      <label>Discord Webhook URL <small>(opsional — notif donasi ke channel Discord)</small></label>
+      <input id="gmDiscord" placeholder="https://discord.com/api/webhooks/...">
+    </div>
+
+    <hr class="section-divider">
+    <div class="section-title">🔐 Akses Dashboard</div>
     <div class="fg" id="gmPwdWrap">
       <label>Password Dashboard</label>
       <input id="gmPwd" type="password" placeholder="Min. 6 karakter">
@@ -302,7 +323,7 @@ tr:hover td{background:rgba(99,102,241,.03)}
         <div class="icon">🎮</div>
         <h2>Archie Admin</h2>
       </div>
-      <p>v3.0.0 · Control Panel</p>
+      <p>v3.1.0 · Control Panel</p>
     </div>
     <nav class="sb-nav">
       <div class="nav-section">
@@ -357,8 +378,8 @@ tr:hover td{background:rgba(99,102,241,.03)}
           </div>
           <div class="tbl-wrap">
             <table>
-              <thead><tr><th>Game</th><th>Universe ID</th><th>Saweria</th><th>SocialBuzz</th><th>Transaksi</th><th>Total Donasi</th><th>Terakhir Aktif</th><th>Aksi</th></tr></thead>
-              <tbody id="ovTbody"><tr><td colspan="8" class="loading"><span class="spinner"></span>Memuat...</td></tr></tbody>
+              <thead><tr><th>Game</th><th>Universe ID</th><th>Saweria</th><th>SocialBuzz</th><th>Discord</th><th>Transaksi</th><th>Total Donasi</th><th>Terakhir Aktif</th><th>Aksi</th></tr></thead>
+              <tbody id="ovTbody"><tr><td colspan="9" class="loading"><span class="spinner"></span>Memuat...</td></tr></tbody>
             </table>
           </div>
         </div>
@@ -507,7 +528,6 @@ function apiDel(path){ return api('DELETE', path); }
 
 // ── Toast ──
 function toast(msg, type){
-  var map = {ok:'t-ok', err:'t-err', info:'t-info'};
   var el = document.getElementById(type === 'err' ? 'tErr' : type === 'info' ? 'tInfo' : 'tOk');
   el.textContent = msg;
   el.style.display = 'block';
@@ -529,6 +549,11 @@ function srcBadge(s){
   var map = {Saweria:'b-green', SocialBuzz:'b-blue', Test:'b-yellow'};
   return '<span class="badge '+(map[s]||'b-yellow')+'">'+esc(s||'?')+'</span>';
 }
+function discordBadge(has){
+  return has
+    ? '<span class="badge b-discord">💬 Set</span>'
+    : '<span class="badge b-yellow">—</span>';
+}
 
 // ── Overview ──
 function loadOverview(){
@@ -545,13 +570,14 @@ function loadOverview(){
       document.getElementById('ovActive').textContent = active;
 
       var tbody = document.getElementById('ovTbody');
-      if(!allGames.length){ tbody.innerHTML = '<tr><td colspan="8"><div class="empty"><div class="ei">🎮</div><p>Belum ada game</p></div></td></tr>'; return; }
+      if(!allGames.length){ tbody.innerHTML = '<tr><td colspan="9"><div class="empty"><div class="ei">🎮</div><p>Belum ada game</p></div></td></tr>'; return; }
       tbody.innerHTML = allGames.map(function(g){
         return '<tr>' +
           '<td><div class="td-name">'+esc(g.name)+'</div><div class="td-id">'+esc(g.id)+'</div></td>' +
           '<td class="td-id">'+esc(g.universeId)+'</td>' +
           '<td>'+(g.saweriaToken ? '<span class="badge b-green">✓ Set</span>' : '<span class="badge b-yellow">—</span>')+'</td>' +
           '<td>'+(g.socialbuzzToken ? '<span class="badge b-blue">✓ Set</span>' : '<span class="badge b-yellow">—</span>')+'</td>' +
+          '<td>'+discordBadge(g.discordWebhookUrl)+'</td>' +
           '<td><span class="badge b-cyan">'+Number(g.donationCount||0).toLocaleString()+'x</span></td>' +
           '<td class="td-money">'+fmt(g.donationTotal)+'</td>' +
           '<td style="color:var(--muted);font-size:12px">'+fmtDate(g.lastActive)+'</td>' +
@@ -592,7 +618,8 @@ function renderGames(list){
       '<td><div style="display:flex;gap:4px;flex-wrap:wrap">' +
         (g.saweriaToken ? '<span class="badge b-green">Saweria</span>' : '') +
         (g.socialbuzzToken ? '<span class="badge b-blue">SocialBuzz</span>' : '') +
-        (!g.saweriaToken && !g.socialbuzzToken ? '<span class="badge b-yellow">—</span>' : '') +
+        (g.discordWebhookUrl ? '<span class="badge b-discord">💬 Discord</span>' : '') +
+        (!g.saweriaToken && !g.socialbuzzToken && !g.discordWebhookUrl ? '<span class="badge b-yellow">—</span>' : '') +
       '</div></td>' +
       '<td><span class="badge b-cyan">'+Number(g.donationCount||0).toLocaleString()+'x</span></td>' +
       '<td class="td-money">'+fmt(g.donationTotal)+'</td>' +
@@ -611,13 +638,14 @@ function renderGames(list){
 window.openAddGame = function(){
   editGameId = null;
   document.getElementById('gmTitle').textContent = '➕ Tambah Game Baru';
-  document.getElementById('gmName').value = '';
-  document.getElementById('gmUid').value  = '';
+  document.getElementById('gmName').value    = '';
+  document.getElementById('gmUid').value     = '';
   document.getElementById('gmApiKey').value  = '';
   document.getElementById('gmTopic').value   = 'ArchieDonationIDR';
   document.getElementById('gmSecret').value  = '';
   document.getElementById('gmSawToken').value = '';
   document.getElementById('gmSbToken').value  = '';
+  document.getElementById('gmDiscord').value  = '';
   document.getElementById('gmPwd').value      = '';
   document.getElementById('gmPwdWrap').style.display = 'block';
   document.getElementById('gameModal').classList.add('active');
@@ -630,33 +658,42 @@ window.openEditGame = function(id){
   document.getElementById('gmTitle').textContent = '✏️ Edit Game — ' + g.name;
   document.getElementById('gmName').value   = g.name;
   document.getElementById('gmUid').value    = g.universeId;
-  document.getElementById('gmApiKey').value = ''; // don't prefill API key
+  document.getElementById('gmApiKey').value = '';
   document.getElementById('gmTopic').value  = g.topic || 'ArchieDonationIDR';
   document.getElementById('gmSecret').value = '';
   document.getElementById('gmSawToken').value = '';
   document.getElementById('gmSbToken').value  = '';
+  document.getElementById('gmDiscord').value  = '';   // never pre-fill sensitive URL
   document.getElementById('gmPwdWrap').style.display = 'none';
   document.getElementById('gameModal').classList.add('active');
 };
 
 window.saveGame = function(){
-  var name   = document.getElementById('gmName').value.trim();
-  var uid    = document.getElementById('gmUid').value.trim();
-  var apiKey = document.getElementById('gmApiKey').value.trim();
-  var topic  = document.getElementById('gmTopic').value.trim() || 'ArchieDonationIDR';
-  var secret = document.getElementById('gmSecret').value.trim();
-  var sawTok = document.getElementById('gmSawToken').value.trim();
-  var sbTok  = document.getElementById('gmSbToken').value.trim();
-  var pwd    = document.getElementById('gmPwd').value;
+  var name      = document.getElementById('gmName').value.trim();
+  var uid       = document.getElementById('gmUid').value.trim();
+  var apiKey    = document.getElementById('gmApiKey').value.trim();
+  var topic     = document.getElementById('gmTopic').value.trim() || 'ArchieDonationIDR';
+  var secret    = document.getElementById('gmSecret').value.trim();
+  var sawTok    = document.getElementById('gmSawToken').value.trim();
+  var sbTok     = document.getElementById('gmSbToken').value.trim();
+  var discordUrl= document.getElementById('gmDiscord').value.trim();
+  var pwd       = document.getElementById('gmPwd').value;
 
   if(!name) return toast('Nama game wajib diisi','err');
   if(!uid)  return toast('Universe ID wajib diisi','err');
+  if(discordUrl && !discordUrl.startsWith('https://discord.com/api/webhooks/'))
+    return toast('Discord Webhook URL tidak valid','err');
 
   if(!editGameId){
     if(!apiKey)       return toast('API Key wajib diisi','err');
     if(!pwd || pwd.length < 6) return toast('Password minimal 6 karakter','err');
-    apiPost('/api/admin/games', { token:TOKEN, name, universeId:uid, apiKey, topic, webhookSecret:secret||undefined, saweriaToken:sawTok||undefined, socialbuzzToken:sbTok||undefined, password:pwd })
-      .then(function(d){
+    apiPost('/api/admin/games', {
+      token:TOKEN, name, universeId:uid, apiKey, topic,
+      webhookSecret:secret||undefined,
+      saweriaToken:sawTok||undefined, socialbuzzToken:sbTok||undefined,
+      discordWebhookUrl:discordUrl||undefined,
+      password:pwd
+    }).then(function(d){
         if(!d.success){ toast(d.error||'Gagal tambah game','err'); return; }
         toast('Game "'+d.game.name+'" berhasil ditambahkan!','ok');
         closeModal('gameModal');
@@ -664,7 +701,7 @@ window.saveGame = function(){
         if(currentPage === 'overview') loadOverview();
       }).catch(function(){ toast('Connection error','err'); });
   } else {
-    var body = { token:TOKEN, name, universeId:uid, topic };
+    var body = { token:TOKEN, name, universeId:uid, topic, discordWebhookUrl:discordUrl };
     if(apiKey) body.apiKey = apiKey;
     if(sawTok) body.saweriaToken = sawTok;
     if(sbTok)  body.socialbuzzToken = sbTok;
@@ -735,7 +772,6 @@ function loadDonStats(id){
       if(!d.success) return;
       document.getElementById('dmCount').textContent = (d.total||0).toLocaleString();
     });
-  // Also get stats via user stats endpoint—use game context
 }
 
 window.debounceSearch = function(){
@@ -753,10 +789,8 @@ function loadDonPage(offset){
       if(!d.success){ tbody.innerHTML = '<tr><td colspan="6" style="color:var(--danger);text-align:center;padding:20px">'+esc(d.error)+'</td></tr>'; return; }
       donTotalRows = d.total;
       document.getElementById('dmCount').textContent = (d.total||0).toLocaleString();
-      var totalAmt = 0;
       if(!d.donations.length){ tbody.innerHTML = '<tr><td colspan="6"><div class="empty"><div class="ei">💸</div><p>Belum ada donasi</p></div></td></tr>'; renderDonPag(); return; }
       tbody.innerHTML = d.donations.map(function(don, i){
-        totalAmt += parseInt(don.amount)||0;
         return '<tr>' +
           '<td style="color:var(--muted)">'+(offset+i+1)+'</td>' +
           '<td style="font-size:12px;white-space:nowrap">'+fmtDate(don.donated_at)+'</td>' +
@@ -794,7 +828,10 @@ window.openUrlModal = function(id){
   document.getElementById('urlContent').innerHTML =
     mkUrlBox('Saweria', base + '/' + secret + '/saweria') +
     mkUrlBox('SocialBuzz', base + '/' + secret + '/socialbuzz') +
-    mkUrlBox('Test Endpoint', base + '/' + secret + '/test');
+    mkUrlBox('Test Endpoint', base + '/' + secret + '/test') +
+    '<div style="margin-top:12px;padding:10px 14px;background:rgba(88,101,242,.07);border:1px solid rgba(88,101,242,.25);border-radius:10px;font-size:12px;color:#7b8fff">' +
+      '💬 <strong>Discord</strong>: ' + (g.discordWebhookUrl ? '<span style="color:var(--success)">✓ Terkonfigurasi</span>' : '<span style="color:var(--muted)">Belum diset — edit game untuk menambahkan</span>') +
+    '</div>';
   document.getElementById('urlModal').classList.add('active');
 };
 
@@ -909,9 +946,11 @@ window.changeAdminCreds = function(){
 
 function loadSysInfo(){
   var el = document.getElementById('sysInfo');
+  var discordCount = allGames.filter(function(g){ return g.discordWebhookUrl; }).length;
   el.innerHTML =
     'Admin User: <strong style="color:var(--accent)">'+esc(ADMIN_USER)+'</strong><br>' +
     'Total Games: <strong style="color:var(--accent2)">'+allGames.length+'</strong><br>' +
+    'Game dengan Discord: <strong style="color:#7b8fff">'+discordCount+'</strong><br>' +
     'Dashboard URL: <strong style="color:var(--success)">'+location.protocol+'//'+location.host+'</strong><br>' +
     'Token (truncated): <strong style="color:var(--warn)">'+TOKEN.slice(0,20)+'...</strong>';
 }
