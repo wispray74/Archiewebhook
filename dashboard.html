@@ -145,10 +145,55 @@ tr:hover td{background:rgba(139,92,246,.04)}
       <div class="ub"><div class="ulb"><span>Saweria</span><button class="btn btn-sm" id="cpySaw">Copy</button></div><div class="ut" id="sawURL">-</div></div>
       <div class="ub"><div class="ulb"><span>SocialBuzz</span><button class="btn btn-sm" id="cpySb">Copy</button></div><div class="ut" id="sbURL">-</div></div>
       <div class="ub"><div class="ulb"><span>Test URL</span><button class="btn btn-sm" id="cpyTest">Copy</button></div><div class="ut" id="testURL">-</div></div>
-      <!-- Discord status block -->
-      <div class="ub discord-box" id="discordBlock" style="display:none">
-        <div class="ulb discord-label"><span>&#x1F4AC; Discord Notification</span></div>
-        <div id="discordStatus" style="font-size:13px;color:#7b8fff">Memuat...</div>
+    </div>
+
+    <!-- ── Discord Webhook Setting ── -->
+    <div class="card" id="discordCard">
+      <h3>&#x1F4AC; Discord Notification</h3>
+
+      <!-- Status banner -->
+      <div id="discordStatusBanner" style="display:none;margin-bottom:18px;padding:12px 16px;border-radius:10px;font-size:13px;font-weight:600"></div>
+
+      <p style="color:#94a3b8;font-size:13px;margin-bottom:20px;line-height:1.7">
+        Setiap donasi yang masuk akan otomatis dikirim sebagai notifikasi ke channel Discord kamu.<br>
+        <span style="color:#64748b;font-size:12px">Cara mendapatkan URL: Channel Settings → Integrations → Webhooks → New Webhook → Copy URL</span>
+      </p>
+
+      <!-- Current state display -->
+      <div id="discordCurrentWrap" style="margin-bottom:18px">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#64748b;margin-bottom:8px">Status Saat Ini</div>
+        <div id="discordCurrentStatus" style="padding:10px 14px;background:rgba(0,0,0,.3);border-radius:8px;font-size:13px;color:#94a3b8">Memuat...</div>
+      </div>
+
+      <!-- Input form -->
+      <div style="margin-bottom:14px">
+        <label style="display:block;color:#cbd5e1;font-size:13px;font-weight:600;margin-bottom:8px">
+          Discord Webhook URL
+          <span style="color:#64748b;font-weight:400;margin-left:4px">(kosongkan untuk menghapus)</span>
+        </label>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <input
+            type="url"
+            id="discordUrlInput"
+            placeholder="https://discord.com/api/webhooks/..."
+            style="flex:1;min-width:260px;padding:11px 14px;background:rgba(15,23,42,.6);border:2px solid rgba(88,101,242,.3);border-radius:9px;color:#fff;font-size:13px;outline:none;transition:border-color .2s"
+            onfocus="this.style.borderColor='#5865f2'"
+            onblur="this.style.borderColor='rgba(88,101,242,.3)'"
+          >
+          <button class="btn" id="btnSaveDiscord" style="background:linear-gradient(135deg,#5865f2,#7b8fff);white-space:nowrap">
+            &#x1F4BE; Simpan & Test
+          </button>
+        </div>
+        <div id="discordInputHint" style="font-size:11px;color:#64748b;margin-top:6px">
+          Saat disimpan, test notifikasi akan dikirim otomatis ke channel Discord kamu.
+        </div>
+      </div>
+
+      <!-- Remove button — hanya muncul kalau sudah ada URL -->
+      <div id="discordRemoveWrap" style="display:none;margin-top:8px">
+        <button class="btn btn-sec" id="btnRemoveDiscord" style="background:rgba(244,63,94,.1);border:1px solid rgba(244,63,94,.3);color:#f43f5e;font-size:12px;padding:7px 14px">
+          🗑️ Hapus Discord Webhook
+        </button>
       </div>
     </div>
   </div>
@@ -180,12 +225,8 @@ tr:hover td{background:rgba(139,92,246,.04)}
       document.getElementById('sawURL').textContent  = G.sawUrl;
       document.getElementById('sbURL').textContent   = G.sbUrl;
       document.getElementById('testURL').textContent = G.testUrl + '?password=' + encodeURIComponent(pwd);
-      // Discord block in settings tab
-      var discordBlock = document.getElementById('discordBlock');
-      discordBlock.style.display = 'block';
-      document.getElementById('discordStatus').innerHTML = G.hasDiscord
-        ? '<span style="color:#10b981">✅ Discord webhook aktif — notifikasi donasi akan dikirim ke channel Discord yang terkonfigurasi.</span>'
-        : '<span style="color:#94a3b8">Discord webhook belum diset. Hubungi admin untuk mengaktifkan notifikasi Discord.</span>';
+      // Render Discord status in settings tab
+      renderDiscordStatus(G.hasDiscord);
       document.title = G.name + ' - Dashboard';
       loadStats();
     })
@@ -221,6 +262,8 @@ tr:hover td{background:rgba(139,92,246,.04)}
   document.getElementById('cpySaw').addEventListener('click', function() { copyUrl('sawURL'); });
   document.getElementById('cpySb').addEventListener('click', function() { copyUrl('sbURL'); });
   document.getElementById('cpyTest').addEventListener('click', function() { copyUrl('testURL'); });
+  document.getElementById('btnSaveDiscord').addEventListener('click', function() { saveDiscordWebhook(); });
+  document.getElementById('btnRemoveDiscord').addEventListener('click', function() { removeDiscordWebhook(); });
 
   // Utils
   function esc(s) {
@@ -388,6 +431,124 @@ tr:hover td{background:rgba(139,92,246,.04)}
         a.click();
         showToast('Export berhasil!', true);
       }).catch(function() { showToast('Gagal export', false); });
+  }
+
+  // ── Discord Webhook Setting ──
+  function renderDiscordStatus(hasDiscord) {
+    var statusEl  = document.getElementById('discordCurrentStatus');
+    var removeWrap = document.getElementById('discordRemoveWrap');
+    var input     = document.getElementById('discordUrlInput');
+    if (hasDiscord) {
+      statusEl.innerHTML = '<span style="color:#10b981">✅ Aktif</span> — notifikasi donasi akan dikirim ke Discord channel yang terkonfigurasi.';
+      removeWrap.style.display = 'block';
+      input.value = '';
+      input.placeholder = 'Masukkan URL baru untuk mengganti...';
+    } else {
+      statusEl.innerHTML = '<span style="color:#64748b">⬜ Belum diset</span> — Discord belum terhubung.';
+      removeWrap.style.display = 'none';
+      input.value = '';
+      input.placeholder = 'https://discord.com/api/webhooks/...';
+    }
+  }
+
+  function showDiscordBanner(msg, type) {
+    // type: 'ok' | 'err' | 'warn'
+    var el = document.getElementById('discordStatusBanner');
+    var styles = {
+      ok:   'background:rgba(52,211,153,.12);border:1px solid rgba(52,211,153,.3);color:#34d399',
+      err:  'background:rgba(244,63,94,.12);border:1px solid rgba(244,63,94,.3);color:#f87171',
+      warn: 'background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.3);color:#fbbf24',
+    };
+    el.style.cssText = styles[type] || styles.ok;
+    el.textContent = msg;
+    el.style.display = 'block';
+    clearTimeout(el._t);
+    el._t = setTimeout(function() { el.style.display = 'none'; }, 5000);
+  }
+
+  function saveDiscordWebhook() {
+    var url = document.getElementById('discordUrlInput').value.trim();
+    if (url && !url.startsWith('https://discord.com/api/webhooks/')) {
+      showDiscordBanner('❌ URL tidak valid. Harus dimulai dengan https://discord.com/api/webhooks/', 'err');
+      return;
+    }
+    if (!url) { removeDiscordWebhook(); return; }
+
+    var btn = document.getElementById('btnSaveDiscord');
+    btn.textContent = '⏳ Menyimpan...';
+    btn.disabled = true;
+
+    fetch('/api/user/discord-webhook', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pwd, discordWebhookUrl: url })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      btn.innerHTML = '&#x1F4BE; Simpan & Test';
+      btn.disabled = false;
+      if (d.success) {
+        G.hasDiscord = true;
+        renderDiscordStatus(true);
+        if (d.warning) {
+          showDiscordBanner('⚠️ ' + d.warning, 'warn');
+        } else {
+          showDiscordBanner('✅ ' + (d.message || 'Berhasil disimpan!'), 'ok');
+        }
+        // Refresh overview info row
+        refreshGameInfoDiscord();
+      } else {
+        showDiscordBanner('❌ ' + (d.error || 'Gagal menyimpan'), 'err');
+      }
+    })
+    .catch(function() {
+      btn.innerHTML = '&#x1F4BE; Simpan & Test';
+      btn.disabled = false;
+      showDiscordBanner('❌ Connection error', 'err');
+    });
+  }
+
+  function removeDiscordWebhook() {
+    if (!confirm('Hapus Discord webhook? Notifikasi Discord tidak akan dikirim lagi.')) return;
+    var btn = document.getElementById('btnRemoveDiscord');
+    btn.textContent = '⏳ Menghapus...';
+    btn.disabled = true;
+
+    fetch('/api/user/discord-webhook', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pwd, discordWebhookUrl: '' })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      btn.textContent = '🗑️ Hapus Discord Webhook';
+      btn.disabled = false;
+      if (d.success) {
+        G.hasDiscord = false;
+        renderDiscordStatus(false);
+        showDiscordBanner('🗑️ Discord webhook berhasil dihapus.', 'warn');
+        refreshGameInfoDiscord();
+      } else {
+        showDiscordBanner('❌ ' + (d.error || 'Gagal menghapus'), 'err');
+      }
+    })
+    .catch(function() {
+      btn.textContent = '🗑️ Hapus Discord Webhook';
+      btn.disabled = false;
+      showDiscordBanner('❌ Connection error', 'err');
+    });
+  }
+
+  function refreshGameInfoDiscord() {
+    // Update the Discord row in overview tab without full reload
+    var rows = document.querySelectorAll('#gameInfo .ir');
+    rows.forEach(function(row) {
+      if (row.querySelector('.il') && row.querySelector('.il').textContent === 'Discord Notif') {
+        row.querySelector('.iv').innerHTML = G.hasDiscord
+          ? '<span class="badge bd">💬 Aktif</span>'
+          : '<span class="badge bw">Tidak diset</span>';
+      }
+    });
   }
 
 })();
