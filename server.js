@@ -61,16 +61,16 @@ async function dbGetGameById(gameId) {
 
 async function dbAddGame(game) {
     await pool.query(`
-        INSERT INTO games (id, name, universe_id, api_key, topic, webhook_secret, saweria_token, socialbuzz_token)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-    `, [game.id, game.name, game.universeId, game.apiKey, game.topic, game.webhookSecret, game.saweriaToken || null, game.socialbuzzToken || null]);
+        INSERT INTO games (id, name, universe_id, api_key, topic, webhook_secret, saweria_token, socialbuzz_token, discord_webhook_url)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+    `, [game.id, game.name, game.universeId, game.apiKey, game.topic, game.webhookSecret, game.saweriaToken || null, game.socialbuzzToken || null, game.discordWebhookUrl || null]);
 }
 
 async function dbUpdateGame(gameId, fields) {
     const sets = [];
     const params = [];
     let i = 1;
-    const allowed = ['name','universe_id','api_key','topic','webhook_secret','saweria_token','socialbuzz_token'];
+    const allowed = ['name','universe_id','api_key','topic','webhook_secret','saweria_token','socialbuzz_token','discord_webhook_url'];
     for (const [k, v] of Object.entries(fields)) {
         if (allowed.includes(k)) { sets.push(`${k} = $${i++}`); params.push(v); }
     }
@@ -86,14 +86,15 @@ async function dbDeleteGame(gameId) {
 
 function rowToGame(row) {
     return {
-        id:              row.id,
-        name:            row.name,
-        universeId:      row.universe_id,
-        apiKey:          row.api_key,
-        topic:           row.topic || 'ArchieDonationIDR',
-        webhookSecret:   row.webhook_secret,
-        saweriaToken:    row.saweria_token || null,
-        socialbuzzToken: row.socialbuzz_token || null
+        id:                 row.id,
+        name:               row.name,
+        universeId:         row.universe_id,
+        apiKey:             row.api_key,
+        topic:              row.topic || 'ArchieDonationIDR',
+        webhookSecret:      row.webhook_secret,
+        saweriaToken:       row.saweria_token || null,
+        socialbuzzToken:    row.socialbuzz_token || null,
+        discordWebhookUrl:  row.discord_webhook_url || null
     };
 }
 
@@ -162,15 +163,16 @@ function loadEnvGames() {
         const pwd = process.env[`GAME_${i}_PASSWORD`];
         if (!uid || !key || !sec || !pwd) break;
         games.push({
-            id:              `game${i}`,
-            name:            process.env[`GAME_${i}_NAME`] || `Game ${i}`,
-            universeId:      uid,
-            apiKey:          key,
-            topic:           process.env[`GAME_${i}_TOPIC`] || 'ArchieDonationIDR',
-            webhookSecret:   sec,
-            saweriaToken:    process.env[`GAME_${i}_SAWERIA_TOKEN`] || null,
-            socialbuzzToken: process.env[`GAME_${i}_SOCIALBUZZ_TOKEN`] || null,
-            envPassword:     pwd
+            id:                `game${i}`,
+            name:              process.env[`GAME_${i}_NAME`] || `Game ${i}`,
+            universeId:        uid,
+            apiKey:            key,
+            topic:             process.env[`GAME_${i}_TOPIC`] || 'ArchieDonationIDR',
+            webhookSecret:     sec,
+            saweriaToken:      process.env[`GAME_${i}_SAWERIA_TOKEN`] || null,
+            socialbuzzToken:   process.env[`GAME_${i}_SOCIALBUZZ_TOKEN`] || null,
+            discordWebhookUrl: process.env[`GAME_${i}_DISCORD_WEBHOOK_URL`] || null,
+            envPassword:       pwd
         });
         i++;
     }
@@ -231,6 +233,53 @@ function formatRupiah(n) {
     return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(n);
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  Discord Webhook
+// ─────────────────────────────────────────────────────────────────────────────
+const SOURCE_COLORS = {
+    Saweria:    0x10b981,   // green
+    SocialBuzz: 0x6366f1,   // indigo
+    Test:       0xfbbf24,   // yellow
+};
+
+const SOURCE_ICONS = {
+    Saweria:    '🟢',
+    SocialBuzz: '🔵',
+    Test:       '🟡',
+};
+
+async function sendToDiscord(game, donation, donationId) {
+    if (!game.discordWebhookUrl) return;
+    try {
+        const color  = SOURCE_COLORS[donation.source] || 0x8b5cf6;
+        const icon   = SOURCE_ICONS[donation.source]  || '💸';
+        const amount = formatRupiah(donation.amount);
+        const embed  = {
+            title:       `${icon} Donasi Baru — ${game.name}`,
+            color,
+            fields: [
+                { name: '👤 Username',     value: donation.username    || '-', inline: true  },
+                { name: '🏷️ Nama',         value: donation.displayName || '-', inline: true  },
+                { name: '💰 Jumlah',       value: `**${amount}**`,              inline: true  },
+                { name: '📡 Platform',     value: donation.source      || '-', inline: true  },
+                { name: '🎮 Game',         value: game.name,                    inline: true  },
+                { name: '🆔 Donation ID',  value: `#${donationId}`,             inline: true  },
+                { name: '💬 Pesan',        value: donation.message    || '*(tidak ada)*', inline: false },
+            ],
+            footer:    { text: 'Archie Webhook System' },
+            timestamp: new Date().toISOString(),
+        };
+        await axios.post(game.discordWebhookUrl, { embeds: [embed] }, {
+            headers: { 'Content-Type': 'application/json' },
+            timeout: 8000,
+        });
+        console.log(`💬 [${game.name}] Discord notif sent`);
+    } catch (e) {
+        // Non-fatal — log but don't throw
+        console.warn(`⚠️  [${game.name}] Discord notif failed: ${e.response?.status || e.message}`);
+    }
+}
+
 async function sendToRoblox(game, data) {
     const url = `https://apis.roblox.com/messaging-service/v1/universes/${game.universeId}/topics/${encodeURIComponent(game.topic)}`;
     console.log(`📤 [${game.name}] ${formatRupiah(data.amount)} → ${data.username} (donationId=${data.donationId})`);
@@ -266,11 +315,11 @@ app.post('/:webhookSecret/saweria', async (req, res) => {
     };
 
     try {
-        // Simpan ke DB dulu untuk dapat ID unik
         const donationId = await dbSaveDonation(game.id, donation);
-        // Sertakan donationId di payload agar Roblox bisa idempotency check
-        const payload = { ...donation, donationId: String(donationId) };
+        const payload    = { ...donation, donationId: String(donationId) };
         await sendToRoblox(game, payload);
+        // Fire-and-forget Discord (non-blocking)
+        sendToDiscord(game, donation, donationId);
         return res.status(200).json({ success: true });
     } catch (e) {
         console.error(`❌ [${game.name}]`, e.message);
@@ -305,8 +354,9 @@ app.post('/:webhookSecret/socialbuzz', async (req, res) => {
 
     try {
         const donationId = await dbSaveDonation(game.id, donation);
-        const payload = { ...donation, donationId: String(donationId) };
+        const payload    = { ...donation, donationId: String(donationId) };
         await sendToRoblox(game, payload);
+        sendToDiscord(game, donation, donationId);
         return res.status(200).json({ success: true });
     } catch (e) {
         console.error(`❌ [${game.name}]`, e.message);
@@ -337,8 +387,9 @@ app.post('/:webhookSecret/test', async (req, res) => {
 
     try {
         const donationId = await dbSaveDonation(game.id, donation);
-        const payload = { ...donation, donationId: String(donationId) };
+        const payload    = { ...donation, donationId: String(donationId) };
         await sendToRoblox(game, payload);
+        sendToDiscord(game, donation, donationId);
         return res.json({ success: true, message: 'Test sent', game: game.name, donationId });
     } catch (e) {
         return res.status(500).json({ success: false, error: e.message });
@@ -414,16 +465,17 @@ app.get('/api/admin/users', async (req, res) => {
         const { rows } = await pool.query('SELECT updated_at FROM game_passwords WHERE game_id=$1', [g.id]).catch(() => ({ rows: [] }));
         const { rows: stats } = await pool.query('SELECT COUNT(*) AS cnt, COALESCE(SUM(amount),0) AS total FROM donations WHERE game_id=$1', [g.id]).catch(() => ({ rows: [{ cnt:0, total:0 }] }));
         return {
-            id:              g.id,
-            name:            g.name,
-            universeId:      g.universeId,
-            topic:           g.topic,
-            webhookSecret:   g.webhookSecret,
-            saweriaToken:    !!g.saweriaToken,
-            socialbuzzToken: !!g.socialbuzzToken,
-            lastActive:      rows[0]?.updated_at || null,
-            donationCount:   parseInt(stats[0]?.cnt || 0),
-            donationTotal:   parseInt(stats[0]?.total || 0)
+            id:                g.id,
+            name:              g.name,
+            universeId:        g.universeId,
+            topic:             g.topic,
+            webhookSecret:     g.webhookSecret,
+            saweriaToken:      !!g.saweriaToken,
+            socialbuzzToken:   !!g.socialbuzzToken,
+            discordWebhookUrl: !!g.discordWebhookUrl,
+            lastActive:        rows[0]?.updated_at || null,
+            donationCount:     parseInt(stats[0]?.cnt || 0),
+            donationTotal:     parseInt(stats[0]?.total || 0)
         };
     }));
     res.json({ success: true, users });
@@ -456,7 +508,7 @@ app.get('/api/admin/donations', async (req, res) => {
 });
 
 app.post('/api/admin/games', async (req, res) => {
-    const { token, name, universeId, apiKey, topic, webhookSecret, password, saweriaToken, socialbuzzToken } = req.body;
+    const { token, name, universeId, apiKey, topic, webhookSecret, password, saweriaToken, socialbuzzToken, discordWebhookUrl } = req.body;
     if (!adminFromToken(token || '')) return res.status(401).json({ success: false, error: 'Unauthorized' });
     if (!name || !universeId || !apiKey || !password)
         return res.json({ success: false, error: 'Field wajib: name, universeId, apiKey, password' });
@@ -467,14 +519,15 @@ app.post('/api/admin/games', async (req, res) => {
     const existing = await dbGetGameBySecret(secret).catch(() => null);
     if (existing) return res.json({ success: false, error: 'Webhook secret sudah dipakai' });
     const game = {
-        id:              gameId,
-        name:            name.trim(),
-        universeId:      universeId.trim(),
-        apiKey:          apiKey.trim(),
-        topic:           topic?.trim() || 'ArchieDonationIDR',
-        webhookSecret:   secret,
-        saweriaToken:    saweriaToken?.trim() || null,
-        socialbuzzToken: socialbuzzToken?.trim() || null
+        id:                gameId,
+        name:              name.trim(),
+        universeId:        universeId.trim(),
+        apiKey:            apiKey.trim(),
+        topic:             topic?.trim() || 'ArchieDonationIDR',
+        webhookSecret:     secret,
+        saweriaToken:      saweriaToken?.trim()      || null,
+        socialbuzzToken:   socialbuzzToken?.trim()   || null,
+        discordWebhookUrl: discordWebhookUrl?.trim() || null,
     };
     try {
         await dbAddGame(game);
@@ -488,18 +541,21 @@ app.post('/api/admin/games', async (req, res) => {
 });
 
 app.put('/api/admin/games/:gameId', async (req, res) => {
-    const { token, name, universeId, apiKey, topic, saweriaToken, socialbuzzToken } = req.body;
+    const { token, name, universeId, apiKey, topic, saweriaToken, socialbuzzToken, discordWebhookUrl } = req.body;
     if (!adminFromToken(token || '')) return res.status(401).json({ success: false, error: 'Unauthorized' });
     const game = await dbGetGameById(req.params.gameId);
     if (!game) return res.json({ success: false, error: 'Game tidak ditemukan' });
     try {
         await dbUpdateGame(req.params.gameId, {
-            name:             name?.trim()           || game.name,
-            universe_id:      universeId?.trim()     || game.universeId,
-            api_key:          apiKey?.trim()          || game.apiKey,
-            topic:            topic?.trim()           || game.topic,
-            saweria_token:    saweriaToken?.trim()    || null,
-            socialbuzz_token: socialbuzzToken?.trim() || null
+            name:               name?.trim()              || game.name,
+            universe_id:        universeId?.trim()        || game.universeId,
+            api_key:            apiKey?.trim()             || game.apiKey,
+            topic:              topic?.trim()              || game.topic,
+            saweria_token:      saweriaToken?.trim()      || null,
+            socialbuzz_token:   socialbuzzToken?.trim()   || null,
+            discord_webhook_url: discordWebhookUrl !== undefined
+                ? (discordWebhookUrl?.trim() || null)
+                : game.discordWebhookUrl,
         });
         res.json({ success: true });
     } catch (e) {
@@ -526,15 +582,16 @@ app.get('/api/user/config', async (req, res) => {
     if (!game) return res.status(401).json({success:false});
     const base = 'https://' + req.headers.host;
     res.json({
-        success: true,
-        name:    game.name,
-        uid:     game.universeId,
-        topic:   game.topic,
-        hasSaw:  !!game.saweriaToken,
-        hasSb:   !!game.socialbuzzToken,
-        sawUrl:  base + '/' + game.webhookSecret + '/saweria',
-        sbUrl:   base + '/' + game.webhookSecret + '/socialbuzz',
-        testUrl: base + '/' + game.webhookSecret + '/test'
+        success:    true,
+        name:       game.name,
+        uid:        game.universeId,
+        topic:      game.topic,
+        hasSaw:     !!game.saweriaToken,
+        hasSb:      !!game.socialbuzzToken,
+        hasDiscord: !!game.discordWebhookUrl,
+        sawUrl:     base + '/' + game.webhookSecret + '/saweria',
+        sbUrl:      base + '/' + game.webhookSecret + '/socialbuzz',
+        testUrl:    base + '/' + game.webhookSecret + '/test'
     });
 });
 
@@ -657,17 +714,20 @@ async function autoMigrate() {
         await client.query('BEGIN');
         await client.query(`
             CREATE TABLE IF NOT EXISTS games (
-                id               VARCHAR(50)  PRIMARY KEY,
-                name             TEXT         NOT NULL,
-                universe_id      TEXT         NOT NULL,
-                api_key          TEXT         NOT NULL,
-                topic            TEXT         DEFAULT 'ArchieDonationIDR',
-                webhook_secret   TEXT         NOT NULL UNIQUE,
-                saweria_token    TEXT,
-                socialbuzz_token TEXT,
-                created_at       TIMESTAMPTZ  DEFAULT NOW()
+                id                  VARCHAR(50)  PRIMARY KEY,
+                name                TEXT         NOT NULL,
+                universe_id         TEXT         NOT NULL,
+                api_key             TEXT         NOT NULL,
+                topic               TEXT         DEFAULT 'ArchieDonationIDR',
+                webhook_secret      TEXT         NOT NULL UNIQUE,
+                saweria_token       TEXT,
+                socialbuzz_token    TEXT,
+                discord_webhook_url TEXT,
+                created_at          TIMESTAMPTZ  DEFAULT NOW()
             )
         `);
+        // Ensure discord_webhook_url column exists on older installs
+        await client.query(`ALTER TABLE games ADD COLUMN IF NOT EXISTS discord_webhook_url TEXT`).catch(()=>{});
         await client.query(`ALTER TABLE games ALTER COLUMN name             TYPE TEXT`).catch(()=>{});
         await client.query(`ALTER TABLE games ALTER COLUMN universe_id      TYPE TEXT`).catch(()=>{});
         await client.query(`ALTER TABLE games ALTER COLUMN api_key          TYPE TEXT`).catch(()=>{});
@@ -733,7 +793,7 @@ autoMigrate()
     .then(async () => {
         const games = await dbGetAllGames();
         console.log(`🎮 ${games.length} game(s) loaded`);
-        games.forEach(g => console.log(`   📌 ${g.id}: ${g.name}`));
+        games.forEach(g => console.log(`   📌 ${g.id}: ${g.name} ${g.discordWebhookUrl ? '💬' : ''}`));
         const db = readDB();
         app.listen(port, () => {
             console.log(`✅ Server on port ${port} | Admin: ${db.admin.username}`);
