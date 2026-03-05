@@ -50,10 +50,12 @@ tr:hover td{background:rgba(139,92,246,.04)}
 .sbar input{flex:1;min-width:180px;padding:10px 14px;background:rgba(15,23,42,.6);border:1.5px solid rgba(139,92,246,.2);border-radius:8px;color:#fff;font-size:13px;outline:none}
 .sbar input:focus{border-color:#8b5cf6}
 .pag{display:flex;justify-content:center;align-items:center;gap:8px;margin-top:16px;font-size:13px;color:#94a3b8}
-.chart{display:flex;align-items:flex-end;gap:6px;height:80px;margin-top:8px}
-.bar-wrap{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px}
-.bar{width:100%;background:linear-gradient(to top,#8b5cf6,#3b82f6);border-radius:4px 4px 0 0;min-height:2px}
-.bar-label{color:#64748b;font-size:10px;text-align:center}
+.chart{display:flex;align-items:flex-end;gap:5px;height:100px;margin-top:8px;padding-bottom:20px;position:relative}
+.bar-wrap{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:4px;height:100%}
+.bar{width:100%;background:linear-gradient(to top,#8b5cf6,#3b82f6);border-radius:3px 3px 0 0;min-height:2px;transition:opacity .2s}
+.bar:hover{opacity:.8}
+.bar.empty{background:rgba(139,92,246,.15)}
+.bar-label{color:#64748b;font-size:10px;text-align:center;white-space:nowrap}
 .modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1000;justify-content:center;align-items:center;padding:20px}
 .modal.active{display:flex}
 .mc{background:rgba(15,23,42,.95);border:1px solid rgba(139,92,246,.3);border-radius:20px;padding:32px;max-width:480px;width:100%}
@@ -323,16 +325,41 @@ tr:hover td{background:rgba(139,92,246,.04)}
         document.getElementById('sTotalAmount').textContent  = fmt(d.totals.total_amount || 0);
         document.getElementById('sTotalCount').textContent   = Number(d.totals.total_donations || 0).toLocaleString();
         document.getElementById('sUniqueDonors').textContent = Number(d.totals.unique_donors || 0).toLocaleString();
-        var days = d.recent7 || [];
-        if (!days.length) {
-          document.getElementById('weekChart').innerHTML = '<p style="color:#64748b;font-size:13px">Belum ada data minggu ini</p>';
-          return;
+
+        // Build a full 7-day slot array (today = index 6, 6 days ago = index 0)
+        var CHART_H = 76; // px — usable bar height inside the 100px container
+        var slots = [];
+        for (var i = 6; i >= 0; i--) {
+          var d2 = new Date();
+          d2.setHours(0, 0, 0, 0);
+          d2.setDate(d2.getDate() - i);
+          // key: YYYY-MM-DD in local time
+          var key = d2.getFullYear() + '-'
+            + String(d2.getMonth() + 1).padStart(2, '0') + '-'
+            + String(d2.getDate()).padStart(2, '0');
+          slots.push({ key: key, date: d2, amount: 0 });
         }
-        var max = Math.max.apply(null, days.map(function(x) { return parseInt(x.amount) || 0; }).concat([1]));
-        document.getElementById('weekChart').innerHTML = days.map(function(day) {
-          var pct = Math.max(4, Math.round((parseInt(day.amount) || 0) / max * 100));
-          var lbl = new Date(day.day).toLocaleDateString('id-ID', {weekday:'short', day:'numeric'});
-          return '<div class="bar-wrap"><div class="bar" style="height:' + pct + '%" title="' + fmt(day.amount) + '"></div><div class="bar-label">' + lbl + '</div></div>';
+
+        // Merge server data into slots
+        (d.recent7 || []).forEach(function(row) {
+          // row.day may be "2026-03-05T00:00:00.000Z" or "2026-03-05"
+          var rawKey = String(row.day).slice(0, 10);
+          var slot = slots.find(function(s) { return s.key === rawKey; });
+          if (slot) slot.amount = parseInt(row.amount) || 0;
+        });
+
+        var max = Math.max.apply(null, slots.map(function(s) { return s.amount; }).concat([1]));
+
+        document.getElementById('weekChart').innerHTML = slots.map(function(slot) {
+          var px  = slot.amount > 0
+            ? Math.max(4, Math.round(slot.amount / max * CHART_H))
+            : 2;
+          var lbl = slot.date.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric' });
+          var isEmpty = slot.amount === 0;
+          return '<div class="bar-wrap">'
+            + '<div class="bar' + (isEmpty ? ' empty' : '') + '" style="height:' + px + 'px" title="' + (isEmpty ? 'Rp0' : fmt(slot.amount)) + '"></div>'
+            + '<div class="bar-label">' + lbl + '</div>'
+            + '</div>';
         }).join('');
       }).catch(function(e) {
         document.getElementById('sTotalAmount').textContent = 'Error';
