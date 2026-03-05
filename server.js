@@ -429,6 +429,45 @@ app.post('/api/user/change-password', async (req, res) => {
     }
 });
 
+app.post('/api/user/discord-webhook', async (req, res) => {
+    try {
+        const { password, discordWebhookUrl } = req.body;
+        const game = await authenticateGame(password);
+        if (!game) return res.status(401).json({ success: false, error: 'Unauthorized' });
+
+        // Validasi format URL (boleh kosong untuk hapus)
+        const url = (discordWebhookUrl || '').trim();
+        if (url && !url.startsWith('https://discord.com/api/webhooks/')) {
+            return res.json({ success: false, error: 'URL Discord Webhook tidak valid' });
+        }
+
+        await dbUpdateGame(game.id, { discord_webhook_url: url || null });
+
+        // Kirim test embed kalau URL baru diset
+        if (url) {
+            try {
+                await axios.post(url, {
+                    embeds: [{
+                        title: '✅ Discord Webhook Terhubung!',
+                        color: 0x34d399,
+                        description: `Game **${game.name}** berhasil terhubung ke Discord.\nSetiap donasi masuk akan dikirim ke channel ini.`,
+                        footer: { text: 'Archie Webhook System' },
+                        timestamp: new Date().toISOString(),
+                    }]
+                }, { headers: { 'Content-Type': 'application/json' }, timeout: 8000 });
+            } catch (e) {
+                // URL valid secara format tapi mungkin salah — tetap simpan, kasih warning
+                return res.json({ success: true, warning: 'Tersimpan, tapi test notifikasi gagal dikirim. Periksa kembali URL webhook.' });
+            }
+        }
+
+        res.json({ success: true, message: url ? 'Discord webhook berhasil disimpan & test notif terkirim!' : 'Discord webhook dihapus.' });
+    } catch (e) {
+        console.error('❌ discord-webhook error:', e.message);
+        res.status(500).json({ success: false, error: 'Server error: ' + e.message });
+    }
+});
+
 app.get('/api/user/donations', async (req, res) => {
     try {
         const game = await authenticateGame(req.query.password);
